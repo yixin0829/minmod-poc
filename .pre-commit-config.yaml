@@ -1,0 +1,36 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v3.2.0
+  hooks:
+  - id: trailing-whitespace
+  - id: end-of-file-fixer
+  - id: check-yaml
+  - id: check-added-large-files
+  - id: check-json
+  - id: pretty-format-json
+    args: [--autofix]
+
+# Sorting of Python library imports
+- repo: https://github.com/pycqa/isort
+  rev: 5.12.0
+  hooks:
+    - id: isort
+      args: ["--profile", "black"]
+
+# Black, the uncompromising Python code formatter
+- repo: https://github.com/psf/black
+  rev: 23.10.1
+  hooks:
+    - id: black
+      language_version: python3.11
+      entry: black .
+
+# Pycln, removes unused imports
+- repo: https://github.com/hadialqattan/pycln
+  rev: v2.3.0 # Possible releases: https://github.com/hadialqattan/pycln/releases
+  hooks:
+    - id: pycln
+      language_version: python3.11
+      entry: pycln

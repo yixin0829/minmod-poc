@@ -1,0 +1,4 @@
+.vscode
+.env
+util.sh
+data/

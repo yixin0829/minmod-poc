@@ -1,1 +1,1 @@
-# minmod-poc
+# MinMod Extractor POC
