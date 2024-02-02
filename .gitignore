@@ -2,3 +2,5 @@
 .env
 util.sh
 data/
+__pycache__/
+log.txt
