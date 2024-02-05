@@ -1,4 +1,5 @@
 import datetime
+import json
 import logging
 import os.path
 
@@ -34,10 +35,9 @@ load_dotenv()
 logging.basicConfig(filename="log.txt", level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-class PDFProcessor(object):
+class PDFExtractor(object):
     """
     Use Adobe PDF Services SDK to extract text and tables from a PDF file.
-    Stick with processor naming convention to avoid confusion with the main extraction module.
 
     Args:
         input_dir (str): Relative path to the raw PDF files.
@@ -55,15 +55,6 @@ class PDFProcessor(object):
             .with_client_secret(os.getenv("PDF_SERVICES_CLIENT_SECRET"))
             .build()
         )
-
-    def bulk_process_pdf(self) -> None:
-        """
-        Process all PDF files in the input directory using process_pdf method.
-        """
-        for file in os.listdir(self.input_dir):
-            if file.lower().endswith(".pdf"):
-                file_path = os.path.join(self.input_dir, file)
-                self.process_pdf(file_path)
 
     def process_pdf(self, file_path: str) -> None:
         """
@@ -132,6 +123,15 @@ class PDFProcessor(object):
         except (ServiceApiException, ServiceUsageException, SdkException) as e:
             logging.exception("Exception encountered while executing operation ")
 
+    def bulk_process_pdf(self) -> None:
+        """
+        Process all PDF files in the input directory using process_pdf method.
+        """
+        for file in os.listdir(self.input_dir):
+            if file.lower().endswith(".pdf"):
+                file_path = os.path.join(self.input_dir, file)
+                self.process_pdf(file_path)
+
     def unzip_result(self) -> None:
         """
         Loop through all directories in the output dir, extract the result.zip file and delete the zip file.
@@ -146,9 +146,66 @@ class PDFProcessor(object):
                     logging.info("Zip file deleted: " + file)
 
 
+class PDFResponseParser(object):
+    """
+    Parse the useful result of the PDF extraction. (paragraphs in structured JSON and CSV tables) into a single text file.
+    """
+
+    def __init__(self, input_dir, output_dir) -> None:
+        self.input_dir = input_dir
+        self.output_dir = output_dir
+
+    def parse_result(self) -> None:
+        """
+        Parse the result of the PDF extraction into a single text file.
+        """
+        # Read directories in the input directory.
+        _, dirs, _ = next(os.walk(self.input_dir))
+        for i, dir in enumerate(sorted(dirs)):
+            # Create a new directory in the output directory with the same name if it doesn't exist.
+            output_path = os.path.join(self.output_dir, dir)
+            os.makedirs(output_path, exist_ok=True)
+
+            # Deserialize the structuredData JSON file and store the paragraphs and tables in a single text file.
+            with open(
+                os.path.join(self.input_dir, dir, "structuredData.json"), "r"
+            ) as f:
+                data = json.load(f)
+                # Loop through elements in "elements" key and extract the text if the "path" key matches regex r"//Document/P[\d]",
+                for element in data.get("elements"):
+                    logging.debug(element)
+                    if element["Path"].startswith("//Document/P"):
+                        with open(os.path.join(output_path, "result.txt"), "a") as f:
+                            if element.get("Text"):
+                                f.write(element.get("Text") + "\n")
+                    # else if the element is a table, append the corresponding CSV table from csv_tables list to the result.txt file.
+                    elif element["Path"].startswith("//Document/Table") and element.get(
+                        "filePaths"
+                    ):
+                        if element["filePaths"][0].endswith(".csv"):
+                            # Read the CSV file and store the table in string
+                            with open(
+                                os.path.join(
+                                    self.input_dir, dir, element["filePaths"][0]
+                                ),
+                                "r",
+                                encoding="utf-8-sig",
+                            ) as f:
+                                # TODO: add more cleaning to the CSV tables.
+                                csv_tables = f.read()
+                                with open(
+                                    os.path.join(output_path, "result.txt"), "a"
+                                ) as f:
+                                    f.write(csv_tables + "\n")
+
+
 if __name__ == "__main__":
-    pdf_processor = PDFProcessor(Config.input_path, Config.output_path)
-    # pdf_processor.process_pdf("data/raw/reports/Mehdiabad Zn 3-2005.pdf")
-    pdf_processor.process_pdf("data/raw/reports/Daniels Harbour Zn 12-2017.pdf")
+    # Extract text and tables from a PDF file.
+    pdf_processor = PDFExtractor(Config.sample_reports_dir, Config.extraction_dir)
+    # pdf_processor.process_pdf("data/raw/reports/Daniels Harbour Zn 12-2017.pdf")
     # pdf_processor.bulk_process_pdf()
-    pdf_processor.unzip_result()
+    # pdf_processor.unzip_result()
+
+    # Parse the result of the PDF extraction.
+    parser = PDFResponseParser(Config.extraction_dir, Config.parsed_result_dir)
+    parser.parse_result()

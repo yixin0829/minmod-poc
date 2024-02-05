@@ -3,5 +3,6 @@ from dataclasses import dataclass
 
 @dataclass
 class Config:
-    input_path: str = "data/raw/reports"
-    output_path: str = "data/asset/extraction"
+    sample_reports_dir: str = "data/raw/reports"
+    extraction_dir: str = "data/asset/extraction"
+    parsed_result_dir: str = "data/asset/parsed_result"
