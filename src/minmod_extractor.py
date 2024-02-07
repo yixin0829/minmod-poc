@@ -11,12 +11,37 @@ from pydantic import BaseModel, Field
 load_dotenv()
 
 
+class DepositType(str, Enum):
+    supergene_zinc = "Supergene zinc"
+    siliciclastic = "Siliciclastic-mafic zinc-lead"
+    mvt_zinc_lead = "MVT zinc-lead"
+
+
+class WeightUnits(str, Enum):
+    tonnes = "tonnes"
+    m_tonnes = "million tonnes"
+    kg = "kilograms"
+
+
+class GradeUnits(str, Enum):
+    percent = "percent"
+    g_tonnes = "grams per tonne"
+    copper_eq_percent = "copper equivalence percent"
+    lead_eq_percent = "lead equivalence percent"
+    us_dollar_per_tonne = "US dollar per tonne"
+    zn_eq_percent = "zinc equivalence percent"
+
+
+class Commodity(str, Enum):
+    zinc = "Zinc"
+
+
 class LocationInfo(BaseModel):
     location: str = Field(
-        description="The location of the mineral site in the format of POINT(latitude longitude). Example: POINT(-107.983333 27.083333), POINT(171425 9367875)"
+        description='The location of the mineral site in the format of "POINT(latitude longitude)".'
     )
     crs: str = Field(
-        description="The coordinate reference system (CRS) of the location. Example: WGS84"
+        description="The coordinate reference system (CRS) of the location. Example: WGS 84, Mercator and so no."
     )
     country: Optional[str] = Field(
         description="The country where the mineral site is located.",
@@ -33,19 +58,15 @@ class MineralInventory(BaseModel):
     category: Optional[str] = Field(
         description="The category of the mineral. Example: Inferred, Indicated, Measured"
     )
-    ore_unit: Optional[str] = Field(
-        description="The unit of the ore. Example: tonnes (t)"
-    )
+    ore_unit: Optional[WeightUnits] = Field(description="The unit of the ore.")
     ore_value: Optional[float] = Field(
         default=0, description="The value of the ore in the unit of ore_unit"
     )
-    grade_unit: Optional[str] = Field(
-        description="The unit of the grade. Example: percent (%)"
-    )
+    grade_unit: Optional[GradeUnits] = Field(description="The unit of the grade.")
     grade_value: Optional[float] = Field(
         default=0, description="The value of the grade in the unit of grade_unit"
     )
-    cutoff_grade_unit: Optional[str] = Field(
+    cutoff_grade_unit: Optional[GradeUnits] = Field(
         default="Unknown",
         description="The unit of the cutoff grade. Example: percent (%)",
     )
@@ -57,17 +78,11 @@ class MineralInventory(BaseModel):
         description="Quantity of a contained metal in an inventory item, float.",
     )
     date: Optional[str] = Field(
-        description="The date of the mineral inventory in the 'dd-mm-YYYY' format. Example: 2021-01-01"
+        description="The date of the mineral inventory in the 'dd-mm-YYYY' format."
     )
     zone: Optional[str] = Field(
         description="The zone of mineral site where inventory item was discovered"
     )
-
-
-class DepositType(str, Enum):
-    supergene_zinc = "Supergene zinc"
-    siliciclastic = "Siliciclastic-mafic zinc-lead"
-    mvt_zinc_lead = "MVT zinc-lead"
 
 
 class MineralSite(BaseModel):
@@ -89,8 +104,9 @@ class JSONSchema(object):
         """
         Generate a JSON schema from a Pydantic model.
         """
+        # https://docs.pydantic.dev/latest/concepts/json_schema/
         output_schema = model.model_json_schema()
-        output_schema_str = json.dumps(output_template)
+        output_schema_str = json.dumps(output_schema)
         return output_schema_str
 
     def extract(self) -> dict:
@@ -131,8 +147,13 @@ class Instructor(object):
 
 
 if __name__ == "__main__":
+    # Generate the JSON schema of MineralSite
+    solution = JSONSchema()
+    output_schema = solution.generate_json_schema(MineralSite)
+    print(output_schema)
+
     # Extract structured data from long PDF text.
-    instructor = Instructor()
-    mineral_site_dict = instructor.extract(
-        "data/asset/parsed_result/Bongará_Zn_3-2019/result.txt"
-    )
+    # solution = Instructor()
+    # mineral_site_dict = solution.extract(
+    #     "data/asset/parsed_result/Bongará_Zn_3-2019/result.txt"
+    # )
