@@ -15,6 +15,7 @@ class DepositType(str, Enum):
     supergene_zinc = "Supergene zinc"
     siliciclastic = "Siliciclastic-mafic zinc-lead"
     mvt_zinc_lead = "MVT zinc-lead"
+    other = "Other"
 
 
 class WeightUnits(str, Enum):
@@ -34,35 +35,53 @@ class GradeUnits(str, Enum):
 
 class Commodity(str, Enum):
     zinc = "Zinc"
+    other = "Other"
 
 
 class LocationInfo(BaseModel):
+    chain_of_thought: str = Field(
+        ...,
+        description="Think step by step to determine the correct location information.",
+    )
     location: str = Field(
-        description='The location of the mineral site in the format of "POINT(latitude longitude)".'
+        default="Unknown",
+        description='The location of the mineral site in the format of "POINT(latitude longitude)".',
     )
     crs: str = Field(
-        description="The coordinate reference system (CRS) of the location. Example: WGS 84, Mercator and so no."
+        default="Unknown",
+        description="The coordinate reference system (CRS) of the location. Example: WGS 84, Mercator and so on.",
     )
     country: Optional[str] = Field(
+        default="Unknown",
         description="The country where the mineral site is located.",
     )
     state_or_province: Optional[str] = Field(
+        default="Unknown",
         description="The state or province where the mineral site is located.",
     )
 
 
 class MineralInventory(BaseModel):
-    commodity: str = Field(
+    chain_of_thought: str = Field(
+        ...,
+        description="Think step by step to determine the correct location information.",
+    )
+    commodity: Commodity = Field(
         description="The type of critical mineral. Example: Zinc, Tungsten, and Nickel."
     )
     category: Optional[str] = Field(
-        description="The category of the mineral. Example: Inferred, Indicated, Measured"
+        default="Unknown",
+        description="The category of the mineral. Example: Inferred, Indicated, Measured",
     )
-    ore_unit: Optional[WeightUnits] = Field(description="The unit of the ore.")
+    ore_unit: Optional[WeightUnits] = Field(
+        default="Unknown", description="The unit of the ore."
+    )
     ore_value: Optional[float] = Field(
         default=0, description="The value of the ore in the unit of ore_unit"
     )
-    grade_unit: Optional[GradeUnits] = Field(description="The unit of the grade.")
+    grade_unit: Optional[GradeUnits] = Field(
+        default="Unknown", description="The unit of the grade."
+    )
     grade_value: Optional[float] = Field(
         default=0, description="The value of the grade in the unit of grade_unit"
     )
@@ -75,13 +94,16 @@ class MineralInventory(BaseModel):
         description="The value of the cutoff grade in the unit of cutoff_grade_unit",
     )
     contained_metal: Optional[float] = Field(
+        default=0,
         description="Quantity of a contained metal in an inventory item, float.",
     )
     date: Optional[str] = Field(
-        description="The date of the mineral inventory in the 'dd-mm-YYYY' format."
+        default="Unknown",
+        description="The date of the mineral inventory in the 'dd-mm-YYYY' format.",
     )
     zone: Optional[str] = Field(
-        description="The zone of mineral site where inventory item was discovered"
+        default="Unknown",
+        description="The zone of mineral site where inventory item was discovered",
     )
 
 
@@ -125,35 +147,36 @@ class Instructor(object):
         # Enables `response_model`
         self.client = instructor.patch(OpenAI())
 
-    def extract(self, file_path: str) -> dict:
+    def extract(self, file_path: str, response_model: BaseModel) -> BaseModel:
         with open(file_path, "r") as f:
             text = f.read()
-        mineral_site = self.client.chat.completions.create(
+        extract_model = self.client.chat.completions.create(
             model="gpt-4-turbo-preview",
-            response_model=MineralSite,
+            response_model=response_model,
             messages=[
                 {
                     "role": "system",
                     "content": "Assistant is a large language model designed to extract structured mineral data from long mineral reports.",
                 },
-                {"role": "user", "content": f"# PDF text\n{text}"},
+                {"role": "user", "content": f"{text}"},
             ],
         )
 
-        assert isinstance(mineral_site, MineralSite)
-        # log mineral_site in JSON format with indent = 2
-        logger.info(f"Mineral site: {mineral_site.model_dump_json(indent=2)}")
-        return mineral_site.model_dump()
+        assert isinstance(extract_model, response_model)
+        return extract_model
 
 
 if __name__ == "__main__":
     # Generate the JSON schema of MineralSite
-    solution = JSONSchema()
-    output_schema = solution.generate_json_schema(MineralSite)
-    print(output_schema)
+    # solution = JSONSchema()
+    # output_schema = solution.generate_json_schema(MineralSite)
+    # print(output_schema)
 
     # Extract structured data from long PDF text.
-    # solution = Instructor()
-    # mineral_site_dict = solution.extract(
-    #     "data/asset/parsed_result/Bongará_Zn_3-2019/result.txt"
-    # )
+    solution = Instructor()
+    model = solution.extract(
+        file_path="data/asset/parsed_result/Bongará_Zn_3-2019/result.txt",
+        response_model=MineralSite,
+    )
+
+    print(model.model_dump_json(indent=2))
