@@ -11,13 +11,6 @@ from pydantic import BaseModel, Field
 load_dotenv()
 
 
-class DepositType(str, Enum):
-    supergene_zinc = "Supergene zinc"
-    siliciclastic = "Siliciclastic-mafic zinc-lead"
-    mvt_zinc_lead = "MVT zinc-lead"
-    other = "Other"
-
-
 class WeightUnits(str, Enum):
     tonnes = "tonnes"
     m_tonnes = "million tonnes"
@@ -39,13 +32,9 @@ class Commodity(str, Enum):
 
 
 class LocationInfo(BaseModel):
-    chain_of_thought: str = Field(
-        ...,
-        description="Think step by step to determine the correct location information.",
-    )
     location: str = Field(
         default="Unknown",
-        description='The location of the mineral site in the format of "POINT(latitude longitude)".',
+        description="The latitude and longitude of the mineral site represented as `POINT(<latitude> <longitude>)` in `EPSG:4326` format.",
     )
     crs: str = Field(
         default="Unknown",
@@ -62,10 +51,6 @@ class LocationInfo(BaseModel):
 
 
 class MineralInventory(BaseModel):
-    chain_of_thought: str = Field(
-        ...,
-        description="Think step by step to determine the correct location information.",
-    )
     commodity: Commodity = Field(
         description="The type of critical mineral. Example: Zinc, Tungsten, and Nickel."
     )
@@ -107,10 +92,17 @@ class MineralInventory(BaseModel):
     )
 
 
+class DepositType(str, Enum):
+    supergene_zinc = "Supergene zinc"
+    siliciclastic = "Siliciclastic-mafic zinc-lead"
+    mvt_zinc_lead = "MVT zinc-lead"
+    other = "Other"
+
+
 class MineralSite(BaseModel):
     name: str = Field(description="The name of the mineral site.")
-    mineral_inventory: list[MineralInventory]
     location_info: LocationInfo
+    mineral_inventory: list[MineralInventory]
     deposit_type: DepositType = Field(description="The type of mineral deposit.")
 
 
