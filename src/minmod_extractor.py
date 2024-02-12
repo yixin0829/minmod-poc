@@ -2,19 +2,21 @@ import json
 from enum import Enum
 from typing import Optional
 
-import instructor
 from dotenv import load_dotenv
 from loguru import logger
-from openai import OpenAI
+from openai import Client, OpenAI
 from pydantic import BaseModel, Field
 
 load_dotenv()
+
+GPT_MODEL = "gpt-4-turbo-preview"
 
 
 class WeightUnits(str, Enum):
     tonnes = "tonnes"
     m_tonnes = "million tonnes"
     kg = "kilograms"
+    other = "Other"
 
 
 class GradeUnits(str, Enum):
@@ -24,6 +26,7 @@ class GradeUnits(str, Enum):
     lead_eq_percent = "lead equivalence percent"
     us_dollar_per_tonne = "US dollar per tonne"
     zn_eq_percent = "zinc equivalence percent"
+    other = "Other"
 
 
 class Commodity(str, Enum):
@@ -31,14 +34,32 @@ class Commodity(str, Enum):
     other = "Other"
 
 
+class MineralCategory(str, Enum):
+    estimated = "Estimated"
+    inferred = "Inferred"
+    indicated = "Indicated"
+    measured = "Measured"
+    probable = "Probable"
+    proven = "Proven"
+    other = "Other"
+
+
+class DepositType(str, Enum):
+    supergene_zinc = "Supergene zinc"
+    siliciclastic = "Siliciclastic-mafic zinc-lead"
+    mvt_zinc_lead = "MVT zinc-lead"
+    other = "Other"
+
+
 class LocationInfo(BaseModel):
     location: str = Field(
         default="Unknown",
-        description="The latitude and longitude of the mineral site represented as `POINT(<latitude> <longitude>)` in `EPSG:4326` format.",
+        # Relaxed the location description to include easting and northing.
+        description="The coordinates of the mineral site represented as `POINT(<latitude> <longitude>)` or `POINT(<easting>, <northing>)` in `EPSG:4326` format.",
     )
     crs: str = Field(
         default="Unknown",
-        description="The coordinate reference system (CRS) of the location. Example: WGS 84, Mercator and so on.",
+        description="The coordinate reference system (CRS) of the location.",
     )
     country: Optional[str] = Field(
         default="Unknown",
@@ -51,12 +72,10 @@ class LocationInfo(BaseModel):
 
 
 class MineralInventory(BaseModel):
-    commodity: Commodity = Field(
-        description="The type of critical mineral. Example: Zinc, Tungsten, and Nickel."
-    )
-    category: Optional[str] = Field(
+    commodity: Commodity = Field(description="The type of critical mineral.")
+    category: Optional[MineralCategory] = Field(
         default="Unknown",
-        description="The category of the mineral. Example: Inferred, Indicated, Measured",
+        description="The category of the mineral.",
     )
     ore_unit: Optional[WeightUnits] = Field(
         default="Unknown", description="The unit of the ore."
@@ -92,13 +111,6 @@ class MineralInventory(BaseModel):
     )
 
 
-class DepositType(str, Enum):
-    supergene_zinc = "Supergene zinc"
-    siliciclastic = "Siliciclastic-mafic zinc-lead"
-    mvt_zinc_lead = "MVT zinc-lead"
-    other = "Other"
-
-
 class MineralSite(BaseModel):
     name: str = Field(description="The name of the mineral site.")
     location_info: LocationInfo
@@ -106,69 +118,58 @@ class MineralSite(BaseModel):
     deposit_type: DepositType = Field(description="The type of mineral deposit.")
 
 
-class JSONSchema(object):
-    """
-    One of the solutions for extracting structured data from long PDF text
-    """
-
-    def __init__(self) -> None:
-        pass
+class MinModExtractor(object):
+    def __init__(self, GPT_MODEL: str) -> None:
+        self.client = OpenAI()
+        self.assistant = None
+        self.thread = None
 
     def generate_json_schema(self, model: BaseModel) -> str:
         """
         Generate a JSON schema from a Pydantic model.
+        https://docs.pydantic.dev/latest/concepts/json_schema/
         """
-        # https://docs.pydantic.dev/latest/concepts/json_schema/
         output_schema = model.model_json_schema()
         output_schema_str = json.dumps(output_schema)
         return output_schema_str
 
-    def extract(self) -> dict:
+    def create_assistant(self):
+        self.assistant = self.client.beta.assistants.create(
+            name="Mineral Data Extractor",
+            instructions="Your task is to extract information from the mineral reports in structured format.",
+            tools=[{"type": "retrieval"}],
+            model=GPT_MODEL,
+        )
+        logger.info(f"Assistant created: {self.assistant.id}")
+
+    def attach_file_to_assistant(self, assistant_id: str, file_id: str):
         """
-        Extract structured data from long PDF text.
+        Create an assistant file by attaching a File to an assistant.
         """
-        pass
-
-
-class Instructor(object):
-    """
-    One of the solutions for extracting structured data from long PDF text
-    """
-
-    def __init__(self) -> None:
-        # Enables `response_model`
-        self.client = instructor.patch(OpenAI())
-
-    def extract(self, file_path: str, response_model: BaseModel) -> BaseModel:
-        with open(file_path, "r") as f:
-            text = f.read()
-        extract_model = self.client.chat.completions.create(
-            model="gpt-4-turbo-preview",
-            response_model=response_model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Assistant is a large language model designed to extract structured mineral data from long mineral reports.",
-                },
-                {"role": "user", "content": f"{text}"},
-            ],
+        assistant_file = self.client.beta.assistants.files.create(
+            assistant_id=assistant_id, file_id=file_id
         )
 
-        assert isinstance(extract_model, response_model)
-        return extract_model
+    def extract(self):
+        self.thread = self.client.beta.threads.create()
+        logger.info(f"Thread created: {thread.id}")
+        message = self.client.beta.threads.messages.create(
+            thread_id=self.thread.id,
+            role="user",
+            content=f"Given a PDF mineral report, your task is to extract structured data from the mineral report. Fill in the following JSON schema:\n# JSON Schema\n{self.generate_json_schema(MineralSite)}",
+        )
+        logger.info(f"Message added to the thread {thread.id}: {message.id}")
+
+        run = self.client.beta.threads.runs.create(
+            thread_id=self.thread.id,
+            assistant_id=self.assistant.id,
+        )
+
+        run = self.client.beta.threads.runs.retrieve(
+            thread_id=self.thread.id, run_id=run.id
+        )
 
 
 if __name__ == "__main__":
-    # Generate the JSON schema of MineralSite
-    # solution = JSONSchema()
-    # output_schema = solution.generate_json_schema(MineralSite)
-    # print(output_schema)
-
-    # Extract structured data from long PDF text.
-    solution = Instructor()
-    model = solution.extract(
-        file_path="data/asset/parsed_result/Bongará_Zn_3-2019/result.txt",
-        response_model=MineralSite,
-    )
-
-    print(model.model_dump_json(indent=2))
+    solution = MinModExtractor(GPT_MODEL=GPT_MODEL)
+    print(solution.generate_json_schema(MineralInventory))
