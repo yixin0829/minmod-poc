@@ -10,3 +10,7 @@ dvc==3.6.0
 dvc-s3==2.23.0
 loguru==0.7.2
 awscli==1.32.34
+unicodedata2==15.1.0
+numpy==1.26.4
+pandas==2.2.0
+pytz==2024.1

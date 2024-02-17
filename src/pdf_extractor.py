@@ -1,8 +1,11 @@
+import csv
 import datetime
 import json
 import logging
 import os.path
+import re
 
+import pandas as pd
 from adobe.pdfservices.operation.auth.credentials import Credentials
 from adobe.pdfservices.operation.client_config import ClientConfig
 from adobe.pdfservices.operation.exception.exceptions import (
@@ -28,11 +31,12 @@ from adobe.pdfservices.operation.pdfops.options.extractpdf.table_structure_type 
 from dotenv import load_dotenv
 
 from config import Config
+from utils import convert_to_numeric, normalize_unicode
 
 load_dotenv()
 
 # Store logs in a file named log.txt and print logs to the console.
-logging.basicConfig(filename="log.txt", level=os.environ.get("LOGLEVEL", "INFO"))
+logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
 class PDFExtractor(object):
@@ -155,6 +159,24 @@ class PDFResponseParser(object):
         self.input_dir = input_dir
         self.output_dir = output_dir
 
+    def _preprocess_text(self, text: str) -> str:
+        text = text.strip()
+        text = text.replace(" +", " ")
+        text = normalize_unicode(text)
+        return text
+
+    def _preprocess_table_df(self, df: pd.DataFrame) -> pd.DataFrame:
+        # Strip the leading and trailing whitespaces from all cells in df.
+        df = df.map(lambda x: x.strip() if isinstance(x, str) else x)
+
+        # Detect if a string is a number and convert it to a number.
+        df = df.map(lambda x: convert_to_numeric(x) if isinstance(x, str) else x)
+
+        # Replace NaN with an empty string
+        df = df.fillna("")
+
+        return df
+
     def parse_result(self) -> None:
         """
         Parse the result of the PDF extraction into a single text file.
@@ -162,6 +184,8 @@ class PDFResponseParser(object):
         # Read directories in the input directory.
         _, dirs, _ = next(os.walk(self.input_dir))
         for i, dir in enumerate(sorted(dirs)):
+            logging.info(f"Processing directory {i+1}/{len(dirs)}: {dir}")
+
             # Create a new directory in the output directory with the same name if it doesn't exist.
             output_path = os.path.join(self.output_dir, dir)
             os.makedirs(output_path, exist_ok=True)
@@ -171,37 +195,84 @@ class PDFResponseParser(object):
                 os.path.join(self.input_dir, dir, "structuredData.json"), "r"
             ) as f:
                 data = json.load(f)
-                # Loop through elements in "elements" key and extract the text if the "path" key matches regex r"//Document/P[\d]",
+
+            with open(os.path.join(output_path, "result.txt"), "a") as result:
+                next_table = False  # Flag to indicate if the next element is a table.
                 for element in data.get("elements"):
                     logging.debug(element)
-                    if element["Path"].startswith("//Document/P"):
-                        with open(os.path.join(output_path, "result.txt"), "a") as f:
-                            if element.get("Text"):
-                                f.write(element.get("Text") + "\n")
-                    # else if the element is a table, append the corresponding CSV table from csv_tables list to the result.txt file.
+                    if element["Path"].startswith("//Document/H"):
+                        # Match the digit come after the H tag.
+                        header_lvl = re.search(r"\d+", element["Path"]).group(0)
+                        prefix = "#" * int(header_lvl) + " "
+                        if element.get("Text"):
+                            preprocessed_text = self._preprocess_text(
+                                element.get("Text")
+                            )
+                            result.write(prefix + preprocessed_text + "\n")
+
+                    # If the element is a paragraph, append the text to the result.txt file.
+                    elif element["Path"].startswith("//Document/P"):
+                        if element.get("Text"):
+                            preprocessed_text = self._preprocess_text(
+                                element.get("Text")
+                            )
+
+                            if (
+                                preprocessed_text.lower().startswith("table")
+                                or next_table
+                            ):
+                                result.write(preprocessed_text + "\n")
+                                next_table = True
+                            else:
+                                result.write(preprocessed_text + "\n\n")
+
+                    # If the element is a list body and contain "Body" in the path
+                    elif element["Path"].startswith("//Document/L") and element[
+                        "Path"
+                    ].endswith("LBody"):
+                        if element.get("Text"):
+                            preprocessed_text = self._preprocess_text(
+                                element.get("Text")
+                            )
+                            result.write("- " + preprocessed_text + "\n")
+
+                    # If the element is a table, append the corresponding CSV table from csv_tables list to the result.txt file.
                     elif element["Path"].startswith("//Document/Table") and element.get(
                         "filePaths"
                     ):
+                        next_table = False
                         if element["filePaths"][0].endswith(".csv"):
-                            # Read the CSV file and store the table in string
-                            with open(
-                                os.path.join(
-                                    self.input_dir, dir, element["filePaths"][0]
-                                ),
-                                "r",
-                                encoding="utf-8-sig",
-                            ) as f:
-                                # TODO: add more cleaning to the CSV tables.
-                                csv_tables = f.read()
-                                with open(
-                                    os.path.join(output_path, "result.txt"), "a"
-                                ) as f:
-                                    f.write(csv_tables + "\n")
+                            # Read the CSV file
+                            csv_path = os.path.join(
+                                self.input_dir, dir, element["filePaths"][0]
+                            )
+                            with open(csv_path, "r", encoding="utf-8-sig") as csv_file:
+                                # Read from the CSV file
+                                reader = csv.reader(csv_file, delimiter=",")
+                                # Find the maxium row length
+                                max_row_length = max(len(row) for row in reader)
+                                # Normalize each row to the max row length
+                                normalized_rows = []
+                                csv_file.seek(0)
+                                for row in reader:
+                                    normalized_rows.append(
+                                        row + [""] * (max_row_length - len(row))
+                                    )
+                                # Create a DataFrame from the normalized rows
+                                df = pd.DataFrame(normalized_rows)
+
+                                # Preprocess the table DataFrame
+                                df = self._preprocess_table_df(df)
+
+                                # Write the DataFrame to the result.txt file
+                                result.write(
+                                    df.to_csv(index=False, header=False) + "\n"
+                                )
 
 
 if __name__ == "__main__":
     # Extract text and tables from a PDF file.
-    pdf_processor = PDFExtractor(Config.sample_reports_dir, Config.extraction_dir)
+    # pdf_processor = PDFExtractor(Config.sample_reports_dir, Config.extraction_dir)
     # pdf_processor.process_pdf("data/raw/reports/Daniels Harbour Zn 12-2017.pdf")
     # pdf_processor.bulk_process_pdf()
     # pdf_processor.unzip_result()
