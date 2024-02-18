@@ -49,7 +49,8 @@ class DepositType(str, Enum):
     irish_type_zinc = "Irish-type sediment- hosted zinc- lead"
 
 
-class LocationInfo(BaseModel):
+class BasicInfo(BaseModel):
+    name: str = Field(description="The name of the mineral site.")
     location: str = Field(
         default="Unknown",
         # Relaxed the location description to include easting and northing.
@@ -105,13 +106,16 @@ class MineralInventory(BaseModel):
     )
 
 
-class MineralSite(BaseModel):
-    name: str = Field(description="The name of the mineral site.")
-    location_info: LocationInfo
-    mineral_inventory: list[MineralInventory]
+class DepositTypeModel(BaseModel):
     deposit_type: DepositType = Field(
         default="Unknown", description="The type of mineral deposit."
     )
+
+
+class MineralSite(BaseModel):
+    basic_info: BasicInfo
+    mineral_inventory: list[MineralInventory]
+    deposit_type: DepositTypeModel
 
 
 class MinModExtractor(object):
@@ -169,5 +173,8 @@ class MinModExtractor(object):
 if __name__ == "__main__":
     solution = MinModExtractor(GPT_MODEL=GPT_MODEL)
     # write the JSON schema to a file
+    print(solution.generate_json_schema(BasicInfo) + "\n")
+    print(solution.generate_json_schema(MineralInventory) + "\n")
+    print(solution.generate_json_schema(DepositTypeModel))
     with open("src/mineral_site_schema.json", "w") as f:
         f.write(solution.generate_json_schema(MineralSite))

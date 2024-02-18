@@ -1,32 +1,6 @@
 {
   "$defs": {
-    "Commodity": {
-      "const": "Zinc",
-      "title": "Commodity",
-      "type": "string"
-    },
-    "DepositType": {
-      "enum": [
-        "Supergene zinc",
-        "Siliciclastic-mafic zinc-lead",
-        "MVT zinc-lead"
-      ],
-      "title": "DepositType",
-      "type": "string"
-    },
-    "GradeUnits": {
-      "enum": [
-        "percent",
-        "grams per tonne",
-        "copper equivalence percent",
-        "lead equivalence percent",
-        "US dollar per tonne",
-        "zinc equivalence percent"
-      ],
-      "title": "GradeUnits",
-      "type": "string"
-    },
-    "LocationInfo": {
+    "BasicInfo": {
       "properties": {
         "country": {
           "anyOf": [
@@ -49,8 +23,13 @@
         },
         "location": {
           "default": "Unknown",
-          "description": "The coordinates of the mineral site represented as `POINT(<latitude> <longitude>)` or `POINT(<easting>, <northing>)` in `EPSG:4326` format.",
+          "description": "The coordinates of the mineral site represented as `POINT(<latitude> <longitude>)` or `POINT(<easting>, <northing>)`",
           "title": "Location",
+          "type": "string"
+        },
+        "name": {
+          "description": "The name of the mineral site.",
+          "title": "Name",
           "type": "string"
         },
         "state_or_province": {
@@ -67,8 +46,53 @@
           "title": "State Or Province"
         }
       },
-      "title": "LocationInfo",
+      "required": [
+        "name"
+      ],
+      "title": "BasicInfo",
       "type": "object"
+    },
+    "Commodity": {
+      "const": "Zinc",
+      "title": "Commodity",
+      "type": "string"
+    },
+    "DepositType": {
+      "enum": [
+        "Supergene zinc",
+        "Siliciclastic-mafic zinc-lead",
+        "MVT zinc-lead",
+        "Irish-type sediment- hosted zinc- lead"
+      ],
+      "title": "DepositType",
+      "type": "string"
+    },
+    "DepositTypeModel": {
+      "properties": {
+        "deposit_type": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/DepositType"
+            }
+          ],
+          "default": "Unknown",
+          "description": "The type of mineral deposit."
+        }
+      },
+      "title": "DepositTypeModel",
+      "type": "object"
+    },
+    "GradeUnits": {
+      "enum": [
+        "percent",
+        "grams per tonne",
+        "copper equivalence percent",
+        "lead equivalence percent",
+        "US dollar per tonne",
+        "zinc equivalence percent"
+      ],
+      "title": "GradeUnits",
+      "type": "string"
     },
     "MineralCategory": {
       "enum": [
@@ -223,17 +247,11 @@
     }
   },
   "properties": {
-    "deposit_type": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/DepositType"
-        }
-      ],
-      "default": "Unknown",
-      "description": "The type of mineral deposit."
+    "basic_info": {
+      "$ref": "#/$defs/BasicInfo"
     },
-    "location_info": {
-      "$ref": "#/$defs/LocationInfo"
+    "deposit_type": {
+      "$ref": "#/$defs/DepositTypeModel"
     },
     "mineral_inventory": {
       "items": {
@@ -241,17 +259,12 @@
       },
       "title": "Mineral Inventory",
       "type": "array"
-    },
-    "name": {
-      "description": "The name of the mineral site.",
-      "title": "Name",
-      "type": "string"
     }
   },
   "required": [
-    "name",
-    "location_info",
-    "mineral_inventory"
+    "basic_info",
+    "mineral_inventory",
+    "deposit_type"
   ],
   "title": "MineralSite",
   "type": "object"

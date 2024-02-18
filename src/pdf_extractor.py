@@ -196,7 +196,7 @@ class PDFResponseParser(object):
             ) as f:
                 data = json.load(f)
 
-            with open(os.path.join(output_path, "result.txt"), "a") as result:
+            with open(os.path.join(output_path, f"{dir}.txt"), "a") as result:
                 next_table = False  # Flag to indicate if the next element is a table.
                 for element in data.get("elements"):
                     logging.debug(element)
