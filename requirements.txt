@@ -14,3 +14,7 @@ unicodedata2==15.1.0
 numpy==1.26.4
 pandas==2.2.0
 pytz==2024.1
+langchain==0.1.9
+langchain-community==0.0.24
+langchain-core==0.1.26
+langchain-openai==0.0.7
