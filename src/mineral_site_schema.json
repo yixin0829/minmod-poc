@@ -2,48 +2,10 @@
   "$defs": {
     "BasicInfo": {
       "properties": {
-        "country": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "Unknown",
-          "description": "The country where the mineral site is located.",
-          "title": "Country"
-        },
-        "crs": {
-          "default": "Unknown",
-          "description": "The coordinate reference system (CRS) of the location.",
-          "title": "Crs",
-          "type": "string"
-        },
-        "location": {
-          "default": "Unknown",
-          "description": "The coordinates of the mineral site represented as `POINT(<latitude> <longitude>)` or `POINT(<easting>, <northing>)`",
-          "title": "Location",
-          "type": "string"
-        },
         "name": {
           "description": "The name of the mineral site.",
           "title": "Name",
           "type": "string"
-        },
-        "state_or_province": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": "Unknown",
-          "description": "The state or province where the mineral site is located.",
-          "title": "State Or Province"
         }
       },
       "required": [
@@ -94,6 +56,50 @@
       "title": "GradeUnits",
       "type": "string"
     },
+    "LocationInfo": {
+      "properties": {
+        "country": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "Unknown",
+          "description": "The country where the mineral site is located.",
+          "title": "Country"
+        },
+        "crs": {
+          "default": "Unknown",
+          "description": "The coordinate reference system (CRS) of the location.",
+          "title": "Crs",
+          "type": "string"
+        },
+        "location": {
+          "default": "Unknown",
+          "description": "The coordinates of the mineral site represented as `POINT(<latitude> <longitude>)` or `POINT(<easting>, <northing>)`",
+          "title": "Location",
+          "type": "string"
+        },
+        "state_or_province": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "Unknown",
+          "description": "The state or province where the mineral site is located.",
+          "title": "State Or Province"
+        }
+      },
+      "title": "LocationInfo",
+      "type": "object"
+    },
     "MineralCategory": {
       "enum": [
         "Estimated",
@@ -106,7 +112,7 @@
       "title": "MineralCategory",
       "type": "string"
     },
-    "MineralInventory": {
+    "MineralCommodity": {
       "properties": {
         "category": {
           "anyOf": [
@@ -126,7 +132,7 @@
               "$ref": "#/$defs/Commodity"
             }
           ],
-          "description": "The type of critical mineral."
+          "description": "The type of critical mineral commodity."
         },
         "cutoff_grade_unit": {
           "anyOf": [
@@ -233,7 +239,7 @@
       "required": [
         "commodity"
       ],
-      "title": "MineralInventory",
+      "title": "MineralCommodity",
       "type": "object"
     },
     "WeightUnits": {
@@ -253,16 +259,16 @@
     "deposit_type": {
       "$ref": "#/$defs/DepositTypeModel"
     },
+    "location_info": {
+      "$ref": "#/$defs/LocationInfo"
+    },
     "mineral_inventory": {
-      "items": {
-        "$ref": "#/$defs/MineralInventory"
-      },
-      "title": "Mineral Inventory",
-      "type": "array"
+      "$ref": "#/$defs/MineralCommodity"
     }
   },
   "required": [
     "basic_info",
+    "location_info",
     "mineral_inventory",
     "deposit_type"
   ],

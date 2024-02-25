@@ -51,6 +51,9 @@ class DepositType(str, Enum):
 
 class BasicInfo(BaseModel):
     name: str = Field(description="The name of the mineral site.")
+
+
+class LocationInfo(BaseModel):
     location: str = Field(
         default="Unknown",
         # Relaxed the location description to include easting and northing.
@@ -70,40 +73,44 @@ class BasicInfo(BaseModel):
     )
 
 
-class MineralInventory(BaseModel):
-    commodity: Commodity = Field(description="The type of critical mineral.")
+class MineralCommodity(BaseModel):
+    commodity: Commodity = Field(description="The type of critical mineral commodity.")
     category: Optional[MineralCategory] = Field(
         default="Unknown",
-        description="The category of the mineral.",
+        description="The category of the mineral commodity.",
     )
     ore_unit: Optional[WeightUnits] = Field(
         default="Unknown", description="The unit of the ore."
     )
     ore_value: Optional[float] = Field(
-        default=-1, description="The value of the ore in the unit of ore_unit"
+        default=-1, description="The value of the ore in the unit of ore_unit."
     )
     grade_unit: Optional[GradeUnits] = Field(
         default="Unknown", description="The unit of the grade."
     )
     grade_value: Optional[float] = Field(
-        default=-1, description="The value of the grade in the unit of grade_unit"
+        default=-1, description="The value of the grade in the unit of grade_unit."
     )
     cutoff_grade_unit: Optional[GradeUnits] = Field(
         default="Unknown",
-        description="The unit of the cutoff grade. Example: percent (%)",
+        description="The unit of the cutoff grade.",
     )
     cutoff_grade_value: Optional[float] = Field(
         default=-1,
-        description="The value of the cutoff grade in the unit of cutoff_grade_unit",
+        description="The value of the cutoff grade in the unit of cutoff_grade_unit.",
     )
     date: Optional[str] = Field(
         default="Unknown",
-        description="The date of the mineral inventory in the 'dd-mm-YYYY' format.",
+        description="The date of the mineral commodity in the 'dd-mm-YYYY' format.",
     )
     zone: Optional[str] = Field(
         default="Unknown",
         description="The mineral zone where the mineral resources or reserves are located",
     )
+
+
+class MineralInventory(BaseModel):
+    mineral_inventory: list[MineralCommodity]
 
 
 class DepositTypeModel(BaseModel):
@@ -114,7 +121,8 @@ class DepositTypeModel(BaseModel):
 
 class MineralSite(BaseModel):
     basic_info: BasicInfo
-    mineral_inventory: list[MineralInventory]
+    location_info: LocationInfo
+    mineral_inventory: MineralCommodity
     deposit_type: DepositTypeModel
 
 
