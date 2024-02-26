@@ -217,6 +217,7 @@ class PDFResponseParser(object):
                                 element.get("Text")
                             )
 
+                            # If the paragraph is a table title, append it to the result.txt file without new line.
                             if (
                                 preprocessed_text.lower().startswith("table")
                                 or next_table
