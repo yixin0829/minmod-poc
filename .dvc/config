@@ -2,5 +2,7 @@
     analytics = false
     remote = datastore
     autostage = true
+[cache]
+    dir = /home/yixin0829/minmod/minmod-poc/.dvc/cache
 ['remote "datastore"']
     url = s3://minmod-poc-dvc-store
