@@ -1,188 +1,64 @@
-import json
-from enum import Enum
-from typing import Optional
+import os
 
 from dotenv import load_dotenv
+from langchain.chains import create_structured_output_runnable
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
 from loguru import logger
-from openai import Client, OpenAI
-from pydantic import BaseModel, Field
+
+import prompts as prompts
+from config import Config, ExtractionMethod
+from schema import MineralSite
 
 load_dotenv()
 
-GPT_MODEL = "gpt-4-turbo-preview"
-
-
-class WeightUnits(str, Enum):
-    tonnes = "tonnes"
-    m_tonnes = "million tonnes"
-    kg = "kilograms"
-
-
-class GradeUnits(str, Enum):
-    percent = "percent"
-    g_tonnes = "grams per tonne"
-    copper_eq_percent = "copper equivalence percent"
-    lead_eq_percent = "lead equivalence percent"
-    us_dollar_per_tonne = "US dollar per tonne"
-    zn_eq_percent = "zinc equivalence percent"
-
-
-class Commodity(str, Enum):
-    zinc = "Zinc"
-    # tungsten = "Tungsten"
-    # nickel = "Nickel"
-
-
-class MineralCategory(str, Enum):
-    estimated = "Estimated"
-    inferred = "Inferred"
-    indicated = "Indicated"
-    measured = "Measured"
-    probable = "Probable"
-    proven = "Proven"
-
-
-class DepositType(str, Enum):
-    supergene_zinc = "Supergene zinc"
-    siliciclastic = "Siliciclastic-mafic zinc-lead"
-    mvt_zinc_lead = "MVT zinc-lead"
-    irish_type_zinc = "Irish-type sediment- hosted zinc- lead"
-
-
-class BasicInfo(BaseModel):
-    name: str = Field(description="The name of the mineral site.")
-
-
-class LocationInfo(BaseModel):
-    location: str = Field(
-        default="Unknown",
-        # Relaxed the location description to include easting and northing.
-        description="The coordinates of the mineral site represented as `POINT(<latitude> <longitude>)` or `POINT(<easting>, <northing>)`",
-    )
-    crs: str = Field(
-        default="Unknown",
-        description="The coordinate reference system (CRS) of the location.",
-    )
-    country: Optional[str] = Field(
-        default="Unknown",
-        description="The country where the mineral site is located.",
-    )
-    state_or_province: Optional[str] = Field(
-        default="Unknown",
-        description="The state or province where the mineral site is located.",
-    )
-
-
-class MineralCommodity(BaseModel):
-    commodity: Commodity = Field(description="The type of critical mineral commodity.")
-    category: Optional[MineralCategory] = Field(
-        default="Unknown",
-        description="The category of the mineral commodity.",
-    )
-    ore_unit: Optional[WeightUnits] = Field(
-        default="Unknown", description="The unit of the ore."
-    )
-    ore_value: Optional[float] = Field(
-        default=-1, description="The value of the ore in the unit of ore_unit."
-    )
-    grade_unit: Optional[GradeUnits] = Field(
-        default="Unknown", description="The unit of the grade."
-    )
-    grade_value: Optional[float] = Field(
-        default=-1, description="The value of the grade in the unit of grade_unit."
-    )
-    cutoff_grade_unit: Optional[GradeUnits] = Field(
-        default="Unknown",
-        description="The unit of the cutoff grade.",
-    )
-    cutoff_grade_value: Optional[float] = Field(
-        default=-1,
-        description="The value of the cutoff grade in the unit of cutoff_grade_unit.",
-    )
-    date: Optional[str] = Field(
-        default="Unknown",
-        description="The date of the mineral commodity in the 'dd-mm-YYYY' format.",
-    )
-    zone: Optional[str] = Field(
-        default="Unknown",
-        description="The mineral zone where the mineral resources or reserves are located",
-    )
-
-
-class MineralInventory(BaseModel):
-    mineral_inventory: list[MineralCommodity]
-
-
-class DepositTypeModel(BaseModel):
-    deposit_type: DepositType = Field(
-        default="Unknown", description="The type of mineral deposit."
-    )
-
-
-class MineralSite(BaseModel):
-    basic_info: BasicInfo
-    location_info: LocationInfo
-    mineral_inventory: MineralCommodity
-    deposit_type: DepositTypeModel
-
 
 class MinModExtractor(object):
-    def __init__(self, GPT_MODEL: str) -> None:
-        self.client = OpenAI()
-        self.assistant = None
-        self.thread = None
+    def __init__(self, MODEL: str) -> None:
+        self.llm = ChatOpenAI(model=MODEL, temperature=0, max_tokens=2048)
 
-    def generate_json_schema(self, model: BaseModel) -> str:
-        """
-        Generate a JSON schema from a Pydantic model.
-        https://docs.pydantic.dev/latest/concepts/json_schema/
-        """
-        output_schema = model.model_json_schema()
-        output_schema = json.dumps(output_schema)
-        return output_schema
+    def extract_baseline(self, doc_path: str, output_schema: str) -> MineralSite:
+        # Load the document
+        logger.info(f"Loading document from {doc_path}")
+        with open(doc_path, "r") as f:
+            doc = f.read()
 
-    def create_assistant(self):
-        self.assistant = self.client.beta.assistants.create(
-            name="Mineral Data Extractor",
-            instructions="Your task is to extract information from the mineral reports in structured format.",
-            tools=[{"type": "retrieval"}],
-            model=GPT_MODEL,
-        )
-        logger.info(f"Assistant created: {self.assistant.id}")
-
-    def attach_file_to_assistant(self, assistant_id: str, file_id: str):
-        """
-        Create an assistant file by attaching a File to an assistant.
-        """
-        assistant_file = self.client.beta.assistants.files.create(
-            assistant_id=assistant_id, file_id=file_id
+        # Construct the prompt
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", prompts.sys_prompt),
+                ("human", "{input}"),
+            ]
         )
 
-    def extract(self):
-        self.thread = self.client.beta.threads.create()
-        logger.info(f"Thread created: {thread.id}")
-        message = self.client.beta.threads.messages.create(
-            thread_id=self.thread.id,
-            role="user",
-            content=f"Given a PDF mineral report, your task is to extract structured data from the mineral report. Fill in the following JSON schema:\n# JSON Schema\n{self.generate_json_schema(MineralSite)}",
-        )
-        logger.info(f"Message added to the thread {thread.id}: {message.id}")
-
-        run = self.client.beta.threads.runs.create(
-            thread_id=self.thread.id,
-            assistant_id=self.assistant.id,
+        # Under the hood, the `create_structured_output_runnable` function uses LCEL to create a chain (e.g. prompt | llm | parser)
+        logger.info("Creating structured output runnable")
+        runnable = create_structured_output_runnable(
+            output_schema=MineralSite,
+            llm=self.llm,
+            mode="openai-json",
+            prompt=prompt,
+            enforce_function_usage=False,
         )
 
-        run = self.client.beta.threads.runs.retrieve(
-            thread_id=self.thread.id, run_id=run.id
-        )
+        logger.info("Invoking the runnable")
+        result = runnable.invoke({"input": doc, "output_schema": output_schema})
+
+        return result
 
 
 if __name__ == "__main__":
-    solution = MinModExtractor(GPT_MODEL=GPT_MODEL)
-    # write the JSON schema to a file
-    print(solution.generate_json_schema(BasicInfo) + "\n")
-    print(solution.generate_json_schema(MineralInventory) + "\n")
-    print(solution.generate_json_schema(DepositTypeModel))
-    with open("src/mineral_site_schema.json", "w") as f:
-        f.write(solution.generate_json_schema(MineralSite))
+    extractor = MinModExtractor(MODEL=Config.MODEL)
+    result = extractor.extract_baseline(
+        "data/asset/parsed_result/Reocin_Zn_3-2002/Reocin_Zn_3-2002.txt",
+        MineralSite.schema_json(),
+    )
+
+    # Turn the result into a JSON string and write to Config.MINMOD_EXTRACTION_DIR as a JSON file with the same name as the document
+    os.makedirs(Config.minmod_extraction_dir(ExtractionMethod.BASELINE), exist_ok=True)
+    result_json = result.json(indent=4)
+    with open(
+        f"{Config.minmod_extraction_dir(ExtractionMethod.BASELINE)}/Reocin_Zn_3-2002.json",
+        "w",
+    ) as f:
+        f.write(result_json)

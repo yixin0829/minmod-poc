@@ -1,4 +1,3 @@
-import json
 import unicodedata
 
 import pandas as pd
@@ -41,14 +40,6 @@ def convert_to_numeric(x: str):
         return pd.to_numeric(x)
     except ValueError:
         return x
-
-
-def generate_json_schema(self, model: BaseModel) -> str:
-    """
-    Generate a JSON schema from a Pydantic model.
-    """
-    json_schema = json.dumps(model.model_json_schema())
-    return json_schema
 
 
 # Max context window of GPT-4-turbo is 128,000 tokens.

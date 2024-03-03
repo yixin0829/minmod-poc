@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic.v1 import BaseModel, Field
 
 
 class WeightUnits(str, Enum):
@@ -105,7 +105,7 @@ class MineralInventory(BaseModel):
     mineral_inventory: list[MineralCommodity]
 
 
-class DepositType(BaseModel):
+class DepositTypeCandidate(BaseModel):
     deposit_type_name: DepositType = Field(
         "Other", description="The observed name of the mineral deposit type."
     )
@@ -114,14 +114,8 @@ class DepositType(BaseModel):
     )
 
 
-class DepositTypeCandidate(BaseModel):
-    deposit_type: list[DepositType] = Field(
-        default="Other", description="All mineral deposit types in the mineral site."
-    )
-
-
 class MineralSite(BaseModel):
     basic_info: BasicInfo
     location_info: LocationInfo
     mineral_inventory: MineralCommodity
-    deposit_type_candidate: DepositTypeCandidate
+    deposit_type_candidate: list[DepositTypeCandidate]
