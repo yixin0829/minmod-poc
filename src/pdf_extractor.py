@@ -35,8 +35,24 @@ from utils import convert_to_numeric, normalize_unicode
 
 load_dotenv()
 
-# Store logs in a file named log.txt and print logs to the console.
-logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
+# Create 'log/' directory if it doesn't exist
+log_directory = Config.LOGGING_DIR
+os.makedirs(log_directory, exist_ok=True)
+# Generate the log filename with the current timestamp
+timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+log_filename = f"log-pdf-extractor-{timestamp}.txt"
+log_path = os.path.join(log_directory, log_filename)
+
+# Configure logging
+logging.basicConfig(
+    level=Config.LOGGING_LEVEL,  # Set the logging level to DEBUG (or another appropriate level)
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[
+        logging.FileHandler(log_path),  # Log messages to a file
+        logging.StreamHandler(),  # Additionally, log messages to stderr (optional)
+    ],
+)
 
 
 class PDFExtractor(object):
@@ -59,6 +75,18 @@ class PDFExtractor(object):
             .with_client_secret(os.getenv("PDF_SERVICES_CLIENT_SECRET"))
             .build()
         )
+
+    def run(self) -> None:
+        """
+        Bulk process all PDF files in the input directory using process_pdf method.
+        """
+        for file in sorted(os.listdir(self.input_dir)):
+            if file.lower().endswith(".pdf"):
+                file_path = os.path.join(self.input_dir, file)
+                self.process_pdf(file_path)
+
+        # Unzip the result.zip files.
+        self.unzip_result()
 
     def process_pdf(self, file_path: str) -> None:
         """
@@ -96,9 +124,13 @@ class PDFExtractor(object):
                 ExtractPDFOptions.builder()
                 .with_elements_to_extract(
                     [ExtractElementType.TEXT, ExtractElementType.TABLES]
-                )
-                .with_element_to_extract_renditions(ExtractRenditionsElementType.TABLES)
-                .with_table_structure_format(TableStructureType.CSV)
+                )  # Extract text and tables
+                .with_element_to_extract_renditions(
+                    ExtractRenditionsElementType.TABLES
+                )  # Extract tables as .pn figures
+                .with_table_structure_format(
+                    TableStructureType.CSV
+                )  # Extract tables as CSV
                 .build()
             )
             extract_pdf_operation.set_options(extract_pdf_options)
@@ -124,17 +156,11 @@ class PDFExtractor(object):
             logging.info(
                 f"Saved result. Elapsed time: {datetime.datetime.now() - start}"
             )
+
+            # TODO: Move the successfully processed file to the processed directory. Right now do it manually.
+
         except (ServiceApiException, ServiceUsageException, SdkException) as e:
             logging.exception("Exception encountered while executing operation ")
-
-    def bulk_process_pdf(self) -> None:
-        """
-        Process all PDF files in the input directory using process_pdf method.
-        """
-        for file in os.listdir(self.input_dir):
-            if file.lower().endswith(".pdf"):
-                file_path = os.path.join(self.input_dir, file)
-                self.process_pdf(file_path)
 
     def unzip_result(self) -> None:
         """
@@ -177,9 +203,10 @@ class PDFResponseParser(object):
 
         return df
 
-    def parse_result(self) -> None:
+    def run(self, overwrite: bool) -> None:
         """
-        Parse the result of the PDF extraction into a single text file.
+        Parse the result of the PDF extraction in input dir into text files in output dir.
+        Overwrite the existing text files if overwrite is True.
         """
         # Read directories in the input directory.
         _, dirs, _ = next(os.walk(self.input_dir))
@@ -187,8 +214,13 @@ class PDFResponseParser(object):
             logging.info(f"Processing directory {i+1}/{len(dirs)}: {dir}")
 
             # Create a new directory in the output directory with the same name if it doesn't exist.
+            # If it exists, skip the directory.
+            if os.path.exists(os.path.join(self.output_dir, dir)) and not overwrite:
+                logging.info(f"Directory {dir} already exists. Skipping...")
+                continue
+
             output_path = os.path.join(self.output_dir, dir)
-            os.makedirs(output_path, exist_ok=True)
+            os.makedirs(output_path)
 
             # Deserialize the structuredData JSON file and store the paragraphs and tables in a single text file.
             with open(
@@ -273,11 +305,9 @@ class PDFResponseParser(object):
 
 if __name__ == "__main__":
     # Extract text and tables from a PDF file.
-    # pdf_processor = PDFExtractor(Config.sample_reports_dir, Config.extraction_dir)
-    # pdf_processor.process_pdf("data/raw/reports/Daniels Harbour Zn 12-2017.pdf")
-    # pdf_processor.bulk_process_pdf()
-    # pdf_processor.unzip_result()
+    # pdf_processor = PDFExtractor(Config.RAW_REPORTS_DIR, Config.EXTRACTION_DIR)
+    # pdf_processor.run()
 
     # Parse the result of the PDF extraction.
-    parser = PDFResponseParser(Config.extraction_dir, Config.parsed_result_dir)
-    parser.parse_result()
+    parser = PDFResponseParser(Config.EXTRACTION_DIR, Config.PARSED_RESULT_DIR)
+    parser.run(overwrite=False)

@@ -1,10 +1,20 @@
-sys_prompt: str = """Your task is to extract information from mineral report documents and output in structured format. The information of interest includes mineral site's name, location information, critical mineral (e.g. zinc) inventory, and deposit type."""
+sys_prompt: str = """You extract information in structured JSON formats. The information of interest includes mineral site's name, location information, critical mineral (e.g. zinc) inventory, and deposit type.
 
-retrieve_basic_info: str = """Please retrieve from the attached "Bongará Zn 3-2019" report, word-for-word, any paragraph or table that is relevant to the mineral site\'s name, location, coordinate reference system (CRS) used, the country and state or province where the mineral site is located. Please enclose the full list of retrieved paragraphs or tables in <retrieved></retrieved> XML tags. If there are no quotes in this document that seem relevant to this question, please say "I can’t find any relevant information"."""
+Extract a valid JSON blob from the user input that matches the following JSON Schema:
 
-retrieve_inventory: str = """Please retrieve from attached "Bongará Zn 3-2019" mineral report, word-for-word, any paragraph or table that is relevant to the mineral site's indicated, inferred resources or reserves including ore tonnage, grade, cutoff grade. Please enclose the full list of retrieved paragraphs or tables in <retrieved></retrieved> XML tags."""
+{output_schema}"""
 
-retrieve_deposit_type: str = """Please retrieve from attached "Bongará Zn 3-2019" mineral report, word-for-word, any paragraph or table that is relevant to the question "What's BONGARÁ ZINC PROJECT's deposit type?" Please enclose the full list of retrieved paragraphs or tables in <retrieved></retrieved> XML tags."""
+retrieve_basic_info: str = (
+    """Please retrieve from the attached "Bongará Zn 3-2019" report, word-for-word, any paragraph or table that is relevant to the mineral site\'s name, location, coordinate reference system (CRS) used, the country and state or province where the mineral site is located. Please enclose the full list of retrieved paragraphs or tables in <retrieved></retrieved> XML tags. If there are no quotes in this document that seem relevant to this question, please say "I can’t find any relevant information"."""
+)
+
+retrieve_inventory: str = (
+    """Please retrieve from attached "Bongará Zn 3-2019" mineral report, word-for-word, any paragraph or table that is relevant to the mineral site's indicated, inferred resources or reserves including ore tonnage, grade, cutoff grade. Please enclose the full list of retrieved paragraphs or tables in <retrieved></retrieved> XML tags."""
+)
+
+retrieve_deposit_type: str = (
+    """Please retrieve from attached "Bongará Zn 3-2019" mineral report, word-for-word, any paragraph or table that is relevant to the question "What's BONGARÁ ZINC PROJECT's deposit type?" Please enclose the full list of retrieved paragraphs or tables in <retrieved></retrieved> XML tags."""
+)
 
 basic_extraction: str = """I want you to use a document and relevant information from the document to extract the mineral site's name, location (latitude and longitude), coordinate reference system (CRS) used, the country and state or province where the mineral site is located.
 
@@ -69,8 +79,12 @@ Please use these to construct an answer with extracted entities and format it as
 
 
 ##################################### New prompt #####################################
-question_1: str = """what's the mineral site's name, or if there are many mineral sites mentioned in the document, names?"""
-question_2: str = """what's {{mineral_site_name}}'s location (latitude and longitude), coordinate reference system (aka coordinate system) used, the country and state/province where the mineral site is located in?"""
+question_1: str = (
+    """what's the mineral site's name, or if there are many mineral sites mentioned in the document, names?"""
+)
+question_2: str = (
+    """what's {{mineral_site_name}}'s location (latitude and longitude), coordinate reference system (aka coordinate system) used, the country and state/province where the mineral site is located in?"""
+)
 question_3: str = """What's {{mineral_site_name}}'s resources or reserves?"""
 question_4: str = """"What's {{mineral_site_name}}'s deposit type?"""
 user_1: str = """Here is a document, enclosed in <document></document> XML tags:
@@ -81,4 +95,6 @@ user_1: str = """Here is a document, enclosed in <document></document> XML tags:
 
 Please retrieve, word-for-word, any paragraphs and tables relevant to the question {{QUESTION}}. Please enclose the full list of retrieved paragraphs and tables in <retrieved></retrieved> XML tags. If there are no paragraphs or tables in this document that seem relevant to this question, please say "I can’t find any relevant information"."""
 
-user_2: str = """I want you to use the attached document and relevant retrieved information from the document to extract the mineral site's name, location (latitude and longitude), coordinate reference system (CRS) used, the country and state or province where the mineral site is located. Format your output to a JSON object that conforms to the JSON schema defined in <json></json> XML tags."""
+user_2: str = (
+    """I want you to use the attached document and relevant retrieved information from the document to extract the mineral site's name, location (latitude and longitude), coordinate reference system (CRS) used, the country and state or province where the mineral site is located. Format your output to a JSON object that conforms to the JSON schema defined in <json></json> XML tags."""
+)

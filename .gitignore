@@ -3,5 +3,5 @@
 util.sh
 data/
 __pycache__/
-log.txt
+logs/
 /data
