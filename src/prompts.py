@@ -1,38 +1,47 @@
-sys_prompt: str = """You extract information in structured JSON formats. The information of interest includes mineral site's name, location information, critical mineral (e.g. zinc) inventory, and deposit type.
+# Note that using mode="openai-json" may require explicit prompting (e.g., OpenAI requires that input messages contain the word “json” in some form when using this parameter).
+sys_prompt: str = """You extract information of interest from user input in structured JSON formats. The information of interest includes mineral site's name, location information, critical mineral (e.g. zinc) inventory, and possible deposit types.
 
-Extract a valid JSON blob from the user input that matches the following JSON Schema:
+{format_instructions}"""
 
-{output_schema}"""
+retrieval_template: str = """Please retrieve from the document, word-for-word, any paragraph or table that is likely relevant to the question "{query}" Please enclose the full list of retrieved paragraphs or tables in <retrieved></retrieved> XML tags. If there are no paragraphs or tables in this document that seem relevant to this question, please say "I can’t find any relevant information".
 
-retrieve_basic_info: str = (
-    """Please retrieve from the attached "Bongará Zn 3-2019" report, word-for-word, any paragraph or table that is relevant to the mineral site\'s name, location, coordinate reference system (CRS) used, the country and state or province where the mineral site is located. Please enclose the full list of retrieved paragraphs or tables in <retrieved></retrieved> XML tags. If there are no quotes in this document that seem relevant to this question, please say "I can’t find any relevant information"."""
+Here is the document, enclosed in <document></document> XML tags:
+<document>
+{doc}
+</document>
+"""
+
+
+basic_info_query: str = """what's the mineral site's name this document is about?"""
+
+location_info_query: str = (
+    """what's {mineral_site_name}'s location (latitude and longitude), coordinate reference system (aka coordinate system), the country and state/province where {mineral_site_name} is located in?"""
 )
 
-retrieve_inventory: str = (
-    """Please retrieve from attached "Bongará Zn 3-2019" mineral report, word-for-word, any paragraph or table that is relevant to the mineral site's indicated, inferred resources or reserves including ore tonnage, grade, cutoff grade. Please enclose the full list of retrieved paragraphs or tables in <retrieved></retrieved> XML tags."""
+mineral_inventory_query: str = (
+    """What's {mineral_site_name}'s resources or reserves? What are the mineral commodities, their categories (e.g. indicated, inferred, measured, probable, proven), ore tonnage, grade, cutoff grade, date reported, and zone?"""
 )
 
-retrieve_deposit_type: str = (
-    """Please retrieve from attached "Bongará Zn 3-2019" mineral report, word-for-word, any paragraph or table that is relevant to the question "What's BONGARÁ ZINC PROJECT's deposit type?" Please enclose the full list of retrieved paragraphs or tables in <retrieved></retrieved> XML tags."""
-)
+deposit_query: str = """What's {mineral_site_name}'s deposit type?"""
 
-basic_extraction: str = """I want you to use a document and relevant information from the document to extract the mineral site's name, location (latitude and longitude), coordinate reference system (CRS) used, the country and state or province where the mineral site is located.
+
+extraction_template: str = """I want you to use a document and relevant information retrieved from the document to answer the question "{query}"
 
 Here is the document, in <document></document> XML tags:
 <document>
-{{DOCUMENT}}
+{doc}
 </document>
 
-Here are direct information retrieved (enclosed in <retrieved></retrieved> XML tags) from the document that are most relevant to the mineral site's name, location (latitude and longitude), coordinate reference system (CRS) used, the country and state or province where the mineral site is located:
+Here are direct information retrieved, enclosed in <retrieved></retrieved> XML tags, from the document that are most relevant to the question "{query}":
 <retrieved>
-{{INSERT_RELEVANT_QUOTES_HERE}}
+{retrieved_info}
 </retrieved>
 
-Please use these to construct an answer with extracted entities and format the answer as a JSON object. Ensure that your answer is accurate and doesn’t contain any information not directly supported by the document or the quotes.
+Please use these to construct your answer and format the answer as a JSON object. Ensure that your answer is accurate and doesn’t contain any information not directly supported by the document or the retrieved information.
 
 Format your answer to a JSON object that conforms to the JSON schema defined in <json></json> XML tags:
 <json>
-{"properties": {"name": {"description": "The name of the mineral site.", "title": "Name", "type": "string"}, "location": {"default": "Unknown", "description": "The coordinates of the mineral site represented as `POINT(<latitude> <longitude>)` or `POINT(<easting>, <northing>)`", "title": "Location", "type": "string"}, "crs": {"default": "Unknown", "description": "The coordinate reference system (CRS) of the location.", "title": "Crs", "type": "string"}, "country": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": "Unknown", "description": "The country where the mineral site is located.", "title": "Country"}, "state_or_province": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": "Unknown", "description": "The state or province where the mineral site is located.", "title": "State Or Province"}}, "required": ["name"], "title": "BasicInfo", "type": "object"}
+{output_schema}
 </json>
 """
 
@@ -76,25 +85,3 @@ Here are direct information retrieved (enclosed in <retrieved></retrieved> XML t
 
 Please use these to construct an answer with extracted entities and format it as a JSON object. Ensure that your answer is accurate and doesn’t contain any information not directly supported by the document or the quotes.
 """
-
-
-##################################### New prompt #####################################
-question_1: str = (
-    """what's the mineral site's name, or if there are many mineral sites mentioned in the document, names?"""
-)
-question_2: str = (
-    """what's {{mineral_site_name}}'s location (latitude and longitude), coordinate reference system (aka coordinate system) used, the country and state/province where the mineral site is located in?"""
-)
-question_3: str = """What's {{mineral_site_name}}'s resources or reserves?"""
-question_4: str = """"What's {{mineral_site_name}}'s deposit type?"""
-user_1: str = """Here is a document, enclosed in <document></document> XML tags:
-
-<document>
-{{DOCUMENT}}
-</document>
-
-Please retrieve, word-for-word, any paragraphs and tables relevant to the question {{QUESTION}}. Please enclose the full list of retrieved paragraphs and tables in <retrieved></retrieved> XML tags. If there are no paragraphs or tables in this document that seem relevant to this question, please say "I can’t find any relevant information"."""
-
-user_2: str = (
-    """I want you to use the attached document and relevant retrieved information from the document to extract the mineral site's name, location (latitude and longitude), coordinate reference system (CRS) used, the country and state or province where the mineral site is located. Format your output to a JSON object that conforms to the JSON schema defined in <json></json> XML tags."""
-)

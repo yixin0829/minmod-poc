@@ -4,4 +4,4 @@ util.sh
 data/
 __pycache__/
 logs/
-/data
+nb/

@@ -8,6 +8,7 @@ class WeightUnits(str, Enum):
     tonnes = "tonnes"
     m_tonnes = "million tonnes"
     kg = "kilograms"
+    unknown = "Unknown"
 
 
 class GradeUnits(str, Enum):
@@ -17,12 +18,13 @@ class GradeUnits(str, Enum):
     lead_eq_percent = "lead equivalence percent"
     us_dollar_per_tonne = "US dollar per tonne"
     zn_eq_percent = "zinc equivalence percent"
+    unknown = "Unknown"
 
 
 class Commodity(str, Enum):
     zinc = "Zinc"
-    # tungsten = "Tungsten"
-    # nickel = "Nickel"
+    tungsten = "Tungsten"
+    nickel = "Nickel"
 
 
 class MineralCategory(str, Enum):
@@ -32,13 +34,15 @@ class MineralCategory(str, Enum):
     measured = "Measured"
     probable = "Probable"
     proven = "Proven"
+    unknown = "Unknown"
 
 
 class DepositType(str, Enum):
     supergene_zinc = "Supergene zinc"
     siliciclastic = "Siliciclastic-mafic zinc-lead"
     mvt_zinc_lead = "MVT zinc-lead"
-    irish_type_zinc = "Irish-type sediment- hosted zinc- lead"
+    irish_type_zinc = "Irish-type sediment-hosted zinc-lead"
+    unknown = "Unknown"
 
 
 class BasicInfo(BaseModel):
@@ -107,7 +111,7 @@ class MineralInventory(BaseModel):
 
 class DepositTypeCandidate(BaseModel):
     deposit_type_name: DepositType = Field(
-        "Other", description="The observed name of the mineral deposit type."
+        "Unknown", description="The observed name of the mineral deposit type."
     )
     confidence: float = Field(
         0.0, description="Confidence level of the deposit type extracted.", ge=0, le=1
