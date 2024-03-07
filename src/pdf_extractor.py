@@ -40,7 +40,7 @@ log_directory = Config.LOGGING_DIR
 os.makedirs(log_directory, exist_ok=True)
 # Generate the log filename with the current timestamp
 timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-log_filename = f"log-pdf-extractor-{timestamp}.txt"
+log_filename = f"pdf_extractor_{timestamp}.log"
 log_path = os.path.join(log_directory, log_filename)
 
 # Configure logging

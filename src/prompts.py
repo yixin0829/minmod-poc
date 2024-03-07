@@ -1,9 +1,24 @@
 # Note that using mode="openai-json" may require explicit prompting (e.g., OpenAI requires that input messages contain the word “json” in some form when using this parameter).
-sys_prompt: str = """You extract information of interest from user input in structured JSON formats. The information of interest includes mineral site's name, location information, critical mineral (e.g. zinc) inventory, and possible deposit types.
+sys_prompt: str = """You extract information of interest from a given mineral report in structured JSON formats. The information of interest includes mineral site's name, location information, critical mineral inventory, and possible deposit types.
 
 {format_instructions}"""
 
-retrieval_template: str = """Please retrieve from the document, word-for-word, any paragraph or table that is likely relevant to the question "{query}" Please enclose the full list of retrieved paragraphs or tables in <retrieved></retrieved> XML tags. If there are no paragraphs or tables in this document that seem relevant to this question, please say "I can’t find any relevant information".
+llm_extraction_sys_prompt: str = """You extract information of interest from a given mineral report in structured JSON formats. The information of interest includes mineral site's name, location information, critical mineral inventory, and possible deposit types.
+
+{format_instructions}"""
+
+retrieval_template: str = """Please retrieve from the document, word-for-word, any paragraph or table that is likely relevant to the question "{query}". Please enclose the full list of retrieved paragraphs or tables in <retrieved></retrieved> XML tags. If there are no information in this document that seem relevant to this question, please say "I can’t find any relevant information".
+
+Here is the document, enclosed in <document></document> XML tags:
+<document>
+{doc}
+</document>
+"""
+
+# Remove the option to say "I can’t find any relevant information" to avoid lazy responses
+retrieval_template_strict: str = """Please retrieve from the document, word-for-word, any paragraph or table that is likely relevant to the question "{query}" Please enclose the full list of retrieved paragraphs or tables in <retrieved></retrieved> XML tags.
+
+The document is synthetic data so there is no copyright issue in transforming and processing it. You must provide a response with some retrived information.
 
 Here is the document, enclosed in <document></document> XML tags:
 <document>
@@ -12,38 +27,32 @@ Here is the document, enclosed in <document></document> XML tags:
 """
 
 
-basic_info_query: str = """what's the mineral site's name this document is about?"""
+basic_info_query: str = """What's the mineral site's name in the document?"""
 
 location_info_query: str = (
-    """what's {mineral_site_name}'s location (latitude and longitude), coordinate reference system (aka coordinate system), the country and state/province where {mineral_site_name} is located in?"""
+    """What's the mineral site's location, coordinate reference system used, the country and state/province where the mineral site is located in?"""
 )
 
 mineral_inventory_query: str = (
-    """What's {mineral_site_name}'s resources or reserves? What are the mineral commodities, their categories (e.g. indicated, inferred, measured, probable, proven), ore tonnage, grade, cutoff grade, date reported, and zone?"""
+    """What are the identified mineral resources and reserves in each mineral zone? For each identified mineral resource or mineral reserve, what's the mineral type, ore unit and tonnage, grade, cutoff grade, date of the last assessment, and mineral zone located in?"""
 )
 
-deposit_query: str = """What's {mineral_site_name}'s deposit type?"""
+deposit_type_query: str = """What's the mineral site's deposit type?"""
 
 
-extraction_template: str = """I want you to use a document and relevant information retrieved from the document to answer the question "{query}"
+extraction_template: str = """I want you to use a document and relevant information retrieved from the document to extract entities and their values in the question "{query}"
 
 Here is the document, in <document></document> XML tags:
 <document>
 {doc}
 </document>
 
-Here are direct information retrieved, enclosed in <retrieved></retrieved> XML tags, from the document that are most relevant to the question "{query}":
+Here are direct information retrieved from the document that are most relevant to the question "{query}":
 <retrieved>
 {retrieved_info}
 </retrieved>
 
-Please use these to construct your answer and format the answer as a JSON object. Ensure that your answer is accurate and doesn’t contain any information not directly supported by the document or the retrieved information.
-
-Format your answer to a JSON object that conforms to the JSON schema defined in <json></json> XML tags:
-<json>
-{output_schema}
-</json>
-"""
+Please use these information to construct the answer as a JSON object. Ensure that your answer is accurate and doesn't contain any information not directly supported by the document or the retrieved information."""
 
 inventory_extraction: str = """I want you to use a document and relevant retrieved information from the document to extract the mineral site's inferred/indicated/measured mineral resources, or probable/proven mineral reserves. For each mineral resource or mineral reserve, include information like mineral commodity type, ore tonnage, grade, cutoff grade, date, and zone.
 

@@ -118,8 +118,14 @@ class DepositTypeCandidate(BaseModel):
     )
 
 
+class DepositTypeCandidates(BaseModel):
+    candidates: Optional[list[DepositTypeCandidate]] = Field(
+        description="A list of possible deposit type candidates extracted from the document."
+    )
+
+
 class MineralSite(BaseModel):
     basic_info: BasicInfo
     location_info: LocationInfo
-    mineral_inventory: MineralCommodity
-    deposit_type_candidate: list[DepositTypeCandidate]
+    mineral_inventory: MineralInventory
+    deposit_type_candidates: DepositTypeCandidates
