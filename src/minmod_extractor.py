@@ -299,10 +299,17 @@ class MinModExtractor(object):
 
 if __name__ == "__main__":
     extractor = MinModExtractor(MODEL_NAME=Config.MODEL_NAME)
-    # extractor.bulk_extract("data/asset/parsed_result", ExtractionMethod.BASELINE)
+    # extractor.bulk_extract(ExtractionMethod.BASELINE, overwrite=Config.MINMOD_BULK_EXTRACTION_OVERWRITE)
 
     # Extract individual document
-    result = extractor.extract_llm_retrieval(
+    docs_w_ground_truth = [
+        "data/asset/parsed_result/Bleiberg_Pb_Zn_5-2017/Bleiberg_Pb_Zn_5-2017.txt",
+        "data/asset/parsed_result/Bongará_Zn_3-2019/Bongará_Zn_3-2019.txt",
+        "data/asset/parsed_result/Hakkari_Zn_3-2010/Hakkari_Zn_3-2010.txt",
+        "data/asset/parsed_result/Hakkari_Zn_7-2013/Hakkari_Zn_7-2013.txt",
         "data/asset/parsed_result/Hakkira_Zn_4-2011/Hakkira_Zn_4-2011.txt",
-        MineralSite,
-    )
+        "data/asset/parsed_result/Mehdiabad_Zn_3-2005/Mehdiabad_Zn_3-2005.txt",
+        "data/asset/parsed_result/Reocin_Zn_3-2002/Reocin_Zn_3-2002.txt",
+    ]
+
+    result = extractor.extract_llm_retrieval(docs_w_ground_truth[0], MineralSite)
