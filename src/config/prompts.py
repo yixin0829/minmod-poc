@@ -3,18 +3,6 @@ sys_prompt: str = """You extract information of interest from a given mineral re
 
 {format_instructions}"""
 
-llm_extraction_sys_prompt: str = """You extract information of interest from a given mineral report in structured JSON formats. The information of interest includes mineral site's name, location information, critical mineral inventory, and possible deposit types.
-
-{format_instructions}"""
-
-retrieval_template: str = """Please retrieve from the document, word-for-word, any paragraph or table that is relevant to {query}. Please enclose the full list of retrieved paragraphs or tables in <retrieved></retrieved> XML tags. If there are no information in this document that seem relevant to this question, please say "I can’t find any relevant information".
-
-Here is the document, enclosed in <document></document> XML tags:
-<document>
-{doc}
-</document>
-"""
-
 # Remove the option to say "I can’t find any relevant information" to avoid lazy responses
 retrieval_template_strict: str = """Please retrieve from the document, word-for-word, any paragraph or table that is relevant to {query}. Please enclose the full list of retrieved paragraphs or tables in <retrieved></retrieved> XML tags.
 

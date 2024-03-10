@@ -111,15 +111,12 @@ class MineralInventory(BaseModel):
 
 class DepositTypeCandidate(BaseModel):
     deposit_type_name: DepositType = Field(
-        "Unknown", description="The observed name of the mineral deposit type."
-    )
-    confidence: float = Field(
-        0.0, description="Confidence level of the deposit type extracted.", ge=0, le=1
+        "Unknown", description="The name of the possible mineral deposit type."
     )
 
 
 class DepositTypeCandidates(BaseModel):
-    candidates: Optional[list[DepositTypeCandidate]] = Field(
+    candidates: list[DepositTypeCandidate] = Field(
         description="A list of possible deposit type candidates extracted from the document."
     )
 

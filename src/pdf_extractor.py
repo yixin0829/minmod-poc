@@ -30,8 +30,8 @@ from adobe.pdfservices.operation.pdfops.options.extractpdf.table_structure_type 
 )
 from dotenv import load_dotenv
 
-from config import Config
-from utils import convert_to_numeric, normalize_unicode
+from src.config.config import Config
+from src.utils.utils import convert_to_numeric, normalize_unicode
 
 load_dotenv()
 

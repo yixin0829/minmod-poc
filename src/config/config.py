@@ -8,6 +8,11 @@ class ExtractionMethod(str, Enum):
     LLM_RETRIEVAL = "llm_retrieval"
 
 
+class LLMModel(str, Enum):
+    GPT_4_TURBO = "gpt-4-turbo-preview"
+    GPT_3_5_TURBO = "gpt-3.5-turbo-0125"
+
+
 @dataclass
 class Config:
     # Raw data directories
@@ -30,7 +35,9 @@ class Config:
     LOGGING_LEVEL: any = logging.INFO
 
     ##### MinMod extractor settings #####
-    MODEL_NAME: str = "gpt-4-turbo-preview"
+    MODEL_NAME: str = LLMModel.GPT_3_5_TURBO.value
+    TEMPERATURE: float = 0.5
+    MAX_TOKENS: int = 2048
     MINMOD_EXTRACTION_BASE_DIR: str = "data/asset/extraction_minmod"
     MINMOD_BULK_EXTRACTION_OVERWRITE: bool = False
 
