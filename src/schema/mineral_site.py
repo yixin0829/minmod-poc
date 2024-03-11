@@ -8,7 +8,7 @@ class WeightUnits(str, Enum):
     tonnes = "tonnes"
     m_tonnes = "million tonnes"
     kg = "kilograms"
-    unknown = "Unknown"
+    unknown = "unknown"
 
 
 class GradeUnits(str, Enum):
@@ -18,7 +18,7 @@ class GradeUnits(str, Enum):
     lead_eq_percent = "lead equivalence percent"
     us_dollar_per_tonne = "US dollar per tonne"
     zn_eq_percent = "zinc equivalence percent"
-    unknown = "Unknown"
+    unknown = "unknown"
 
 
 class Commodity(str, Enum):
@@ -28,13 +28,13 @@ class Commodity(str, Enum):
 
 
 class MineralCategory(str, Enum):
-    estimated = "Estimated"
-    inferred = "Inferred"
-    indicated = "Indicated"
-    measured = "Measured"
-    probable = "Probable"
-    proven = "Proven"
-    unknown = "Unknown"
+    estimated = "estimated"
+    inferred = "inferred"
+    indicated = "indicated"
+    measured = "measured"
+    probable = "probable"
+    proven = "proven"
+    unknown = "unknown"
 
 
 class DepositType(str, Enum):
@@ -42,7 +42,13 @@ class DepositType(str, Enum):
     siliciclastic = "Siliciclastic-mafic zinc-lead"
     mvt_zinc_lead = "MVT zinc-lead"
     irish_type_zinc = "Irish-type sediment-hosted zinc-lead"
-    unknown = "Unknown"
+    unknown = "unknown"
+
+
+class CRS(str, Enum):
+    WGS84 = "WGS84"
+    UTM = "UTM"
+    unknown = "unknown"
 
 
 class BasicInfo(BaseModel):
@@ -50,58 +56,66 @@ class BasicInfo(BaseModel):
 
 
 class LocationInfo(BaseModel):
-    location: str = Field(
-        default="Unknown",
+    location: Optional[str] = Field(
+        default="unknown",
         # Relaxed the location description to include easting and northing.
-        description="The coordinates of the mineral site represented as `POINT(<latitude> <longitude>)` or `POINT(<easting>, <northing>)`",
+        description="Polygon or Point, value indicates the geolocation of the mineral site, represented as `POINT(<latitude> <longitude>)`.",
     )
-    crs: str = Field(
-        default="Unknown",
-        description="The coordinate reference system (CRS) used for representing the location.",
+    crs: Optional[CRS] = Field(
+        default="unknown",
+        description="The coordinate reference system (CRS) used for the mineral site's location.",
     )
     country: Optional[str] = Field(
-        default="Unknown",
+        default="unknown",
         description="The country where the mineral site is located.",
     )
     state_or_province: Optional[str] = Field(
-        default="Unknown",
+        default="unknown",
         description="The state or province where the mineral site is located.",
     )
 
 
 class MineralCommodity(BaseModel):
-    commodity: Commodity = Field(description="The type of critical mineral commodity.")
+    commodity: Commodity = Field(
+        description="The commodity of an mineral inventory item."
+    )
     category: Optional[MineralCategory] = Field(
-        default="Unknown",
-        description="The category of the mineral commodity.",
+        default="unknown",
+        description="The category of an mineral inventory item.",
     )
     ore_unit: Optional[WeightUnits] = Field(
-        default="Unknown", description="The unit of the ore."
+        default="unknown",
+        description="The unit in which ore quantity is measured, eg, tonnes.",
     )
     ore_value: Optional[float] = Field(
-        default=-1, description="The value of the ore in the unit of ore_unit."
+        default=-1, description="The value of ore quantity measured in ore unit."
     )
     grade_unit: Optional[GradeUnits] = Field(
-        default="Unknown", description="The unit of the grade."
+        default="unknown",
+        description="The unit in which grade is measured, eg, percent.",
     )
     grade_value: Optional[float] = Field(
-        default=-1, description="The value of the grade in the unit of grade_unit."
+        default=-1, description="The value of grade measured in grade unit."
     )
     cutoff_grade_unit: Optional[GradeUnits] = Field(
-        default="Unknown",
-        description="The unit of the cutoff grade.",
+        default="unknown",
+        description="Cut-off grade unit of an inventory item.",
     )
     cutoff_grade_value: Optional[float] = Field(
         default=-1,
-        description="The value of the cutoff grade in the unit of cutoff_grade_unit.",
+        description="Cut-off grade value of an inventory item measured in cut-off grade unit.",
+    )
+    contained_metal: Optional[float] = Field(
+        default=-1,
+        description="The quantity of a contained metal in an inventory item.",
     )
     date: Optional[str] = Field(
-        default="Unknown",
-        description="The date of the mineral commodity in the 'dd-mm-YYYY' format.",
+        default="unknown",
+        description='When in the point of time mineral inventory valid. Format as "YYYY-mm".',
     )
     zone: Optional[str] = Field(
-        default="Unknown",
-        description="The mineral zone where the mineral resources or reserves are located.",
+        default="unknown",
+        description="Zone of mineral site where the mineral commodity was discovered.",
     )
 
 
@@ -110,19 +124,21 @@ class MineralInventory(BaseModel):
 
 
 class DepositTypeCandidate(BaseModel):
-    deposit_type_name: DepositType = Field(
-        "Unknown", description="The name of the possible mineral deposit type."
+    observed_name: DepositType = Field(
+        description="The name of the possible mineral deposit type."
     )
 
 
 class DepositTypeCandidates(BaseModel):
-    candidates: list[DepositTypeCandidate] = Field(
-        description="A list of possible deposit type candidates extracted from the document."
-    )
+    deposit_type_candidate: list[DepositTypeCandidate]
 
 
 class MineralSite(BaseModel):
     basic_info: BasicInfo
     location_info: LocationInfo
-    mineral_inventory: MineralInventory
-    deposit_type_candidates: DepositTypeCandidates
+    mineral_inventory: list[MineralCommodity] = Field(
+        description="Mineral inventory of the site include indicated/inferred/measured mineral resources and probable/proven mineral reserves in each mineral zone."
+    )
+    deposit_type_candidate: list[DepositTypeCandidate] = Field(
+        description="A list of possible deposit type candidates extracted from the document."
+    )

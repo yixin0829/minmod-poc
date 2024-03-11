@@ -30,8 +30,8 @@ from adobe.pdfservices.operation.pdfops.options.extractpdf.table_structure_type 
 )
 from dotenv import load_dotenv
 
-from src.config.config import Config
-from src.utils.utils import convert_to_numeric, normalize_unicode
+from config.config import Config
+from utils.utils import convert_to_numeric, normalize_unicode
 
 load_dotenv()
 
@@ -218,9 +218,11 @@ class PDFResponseParser(object):
             if os.path.exists(os.path.join(self.output_dir, dir)) and not overwrite:
                 logging.info(f"Directory {dir} already exists. Skipping...")
                 continue
-
-            output_path = os.path.join(self.output_dir, dir)
-            os.makedirs(output_path)
+            else:
+                # if overwrite is True, delete the existing directory and create a new one.
+                output_path = os.path.join(self.output_dir, dir)
+                os.system(f"rm -r {output_path}")
+                os.makedirs(output_path)
 
             # Deserialize the structuredData JSON file and store the paragraphs and tables in a single text file.
             with open(
@@ -229,18 +231,27 @@ class PDFResponseParser(object):
                 data = json.load(f)
 
             with open(os.path.join(output_path, f"{dir}.txt"), "a") as result:
-                next_table = False  # Flag to indicate if the next element is a table.
+                result.write("# COVER PAGE\n\n")
+                next_table = False  # Flag to indicate if the next element is a table
                 for element in data.get("elements"):
                     logging.debug(element)
                     if element["Path"].startswith("//Document/H"):
-                        # Match the digit come after the H tag.
-                        header_lvl = re.search(r"\d+", element["Path"]).group(0)
-                        prefix = "#" * int(header_lvl) + " "
-                        if element.get("Text"):
-                            preprocessed_text = self._preprocess_text(
-                                element.get("Text")
-                            )
-                            result.write(prefix + preprocessed_text + "\n")
+                        if element["Page"] > 0:
+                            # Match the digit come after the H tag.
+                            header_lvl = re.search(r"\d+", element["Path"]).group(0)
+                            prefix = "#" * int(header_lvl) + " "
+                            if element.get("Text"):
+                                preprocessed_text = self._preprocess_text(
+                                    element.get("Text")
+                                )
+                                result.write(prefix + preprocessed_text + "\n")
+                        else:
+                            # If the header is on the first page, append it to the result.txt file without header.
+                            if element.get("Text"):
+                                preprocessed_text = self._preprocess_text(
+                                    element.get("Text")
+                                )
+                                result.write(preprocessed_text + "\n")
 
                     # If the element is a paragraph, append the text to the result.txt file.
                     elif element["Path"].startswith("//Document/P"):
@@ -305,9 +316,11 @@ class PDFResponseParser(object):
 
 if __name__ == "__main__":
     # Extract text and tables from a PDF file.
-    # pdf_processor = PDFExtractor(Config.RAW_REPORTS_DIR, Config.EXTRACTION_DIR)
-    # pdf_processor.run()
+    pdf_processor = PDFExtractor(Config.RAW_REPORTS_DIR, Config.EXTRACTION_DIR)
+    pdf_processor.process_pdf(
+        file_path="/home/yixin0829/minmod/minmod-poc/data/raw/mvt_zinc/reports_failed/Prairie Creek Zn Pb Ag 9-2017 FS.pdf"
+    )
 
     # Parse the result of the PDF extraction.
-    parser = PDFResponseParser(Config.EXTRACTION_DIR, Config.PARSED_RESULT_DIR)
-    parser.run(overwrite=False)
+    # parser = PDFResponseParser(Config.EXTRACTION_DIR, Config.PARSED_RESULT_DIR)
+    # parser.run(overwrite=True)
