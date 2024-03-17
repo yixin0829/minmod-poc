@@ -316,7 +316,7 @@ class PDFResponseParser(object):
 
 if __name__ == "__main__":
     # Extract text and tables from a PDF file.
-    pdf_processor = PDFExtractor(Config.RAW_REPORTS_DIR, Config.EXTRACTION_DIR)
+    pdf_processor = PDFExtractor(Config.RAW_REPORTS_DIR, Config.PDF_EXTRACTION_DIR)
     pdf_processor.process_pdf(
         file_path="/home/yixin0829/minmod/minmod-poc/data/raw/mvt_zinc/reports_failed/Prairie Creek Zn Pb Ag 9-2017 FS.pdf"
     )

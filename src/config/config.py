@@ -11,26 +11,40 @@ class ExtractionMethod(str, Enum):
 
 class LLMModel(str, Enum):
     GPT_4_TURBO = "gpt-4-turbo-preview"
-    GPT_3_5_TURBO = "gpt-3.5-turbo-0125"
+    GPT_3_5_TURBO = "gpt-3.5-turbo"
 
 
 @dataclass
 class Config:
     ##### General settings #####
     # Raw data directories
-    RAW_REPORTS_DIR: str = "data/raw/mvt_zinc/reports"
-    RAW_REPORTS_DIR_FAILED: str = "data/raw/mvt_zinc/reports_failed"
-    RAW_REPORTS_DIR_PROCESSED: str = "data/raw/mvt_zinc/reports_processed"
+    RAW_REPORTS_DIR: str = "data/raw/mvt_zinc/reports"  # Remaining Raw reports
+    RAW_REPORTS_DIR_FAILED: str = (
+        "data/raw/mvt_zinc/reports_failed"  # Reports failed to be extracted using PDF extractor
+    )
+    RAW_REPORTS_DIR_PROCESSED: str = (
+        "data/raw/mvt_zinc/reports_processed"  # Reports that have been processed
+    )
 
     # Data asset directories
-    EXTRACTION_DIR: str = "data/asset/extraction_pdf"  # Extraction from PDF
-    PARSED_RESULT_DIR: str = (
-        "data/asset/parsed_result"  # Parsed result from PDF extraction
+    PDF_EXTRACTION_DIR: str = "data/asset/extraction_pdf"  # Extraction from PDF
+    GROUND_TRUTH_INFERLINK_DIR: str = (
+        "data/asset/ground_truth/inferlink"  # Ground truth from Inferlink
     )
-    GROUND_TRUTH_DIR: str = "data/asset/ground_truth"
-    PARSED_RESULT_MOCK_DIR: str = "data/asset/parsed_result_mock"  # Mock parsed result
-    PARSED_RESULT_W_GT_DIR: str = (
-        "data/asset/parsed_result_w_gt"  # Parsed result with ground truth
+    GROUND_TRUTH_SIMPLIFIED_DIR: str = (
+        "data/asset/ground_truth/simplified"  # Simplified ground truth that conforms to MineralSite schema
+    )
+    PARSED_PDF_DIR: str = (
+        "data/asset/parsed_result"  # Parsed PDF txt from PDF extraction
+    )
+    PARSED_PDF_MOCK_DIR: str = (
+        "data/asset/parsed_pdf_mock"  # Mock parsed PDF txt result
+    )
+    PARSED_PDF_W_GT_DIR: str = (
+        "data/asset/parsed_pdf_w_gt"  # Parsed PDF txt with ground truth
+    )
+    MINMOD_EXTRACTION_BASE_DIR: str = (
+        "data/asset/extraction_minmod"  # MinMod extraction result
     )
 
     ##### PDF extractor settings #####
@@ -41,11 +55,11 @@ class Config:
     LOGGING_LEVEL: any = logging.INFO
 
     ##### MinMod extractor settings #####
-    MODEL_NAME: str = LLMModel.GPT_4_TURBO.value
+    MODEL_NAME: str = LLMModel.GPT_3_5_TURBO.value
     TEMPERATURE: float = 0.5
     MAX_TOKENS: int = 2048
-    MINMOD_EXTRACTION_BASE_DIR: str = "data/asset/extraction_minmod"
     MINMOD_BULK_EXTRACTION_OVERWRITE: bool = True
 
     def minmod_extraction_dir(self, method: ExtractionMethod) -> str:
+        """Return the directory for the MinMod extraction result of the specified method."""
         return f"{self.MINMOD_EXTRACTION_BASE_DIR}/{method.value}"

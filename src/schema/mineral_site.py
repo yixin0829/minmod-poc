@@ -39,7 +39,7 @@ class MineralCategory(str, Enum):
 
 class DepositType(str, Enum):
     supergene_zinc = "Supergene zinc"
-    siliciclastic = "Siliciclastic-mafic zinc-lead"
+    siliciclastic_mafic_zinc_lead = "Siliciclastic-mafic zinc-lead"
     mvt_zinc_lead = "MVT zinc-lead"
     irish_type_zinc = "Irish-type sediment-hosted zinc-lead"
     unknown = "unknown"
