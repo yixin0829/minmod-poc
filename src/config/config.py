@@ -4,6 +4,7 @@ from enum import Enum
 
 
 class ExtractionMethod(str, Enum):
+    # Baseline: extraction using long-context LLM + entire output schema
     BASELINE = "baseline"
     LLM_RETRIEVER = "llm_retriever"
     VECTOR_RETRIEVER = "vector_retriever"
@@ -34,9 +35,7 @@ class Config:
     GROUND_TRUTH_SIMPLIFIED_DIR: str = (
         "data/asset/ground_truth/simplified"  # Simplified ground truth that conforms to MineralSite schema
     )
-    PARSED_PDF_DIR: str = (
-        "data/asset/parsed_result"  # Parsed PDF txt from PDF extraction
-    )
+    PARSED_PDF_DIR: str = "data/asset/parsed_pdf"  # Parsed PDF txt result
     PARSED_PDF_MOCK_DIR: str = (
         "data/asset/parsed_pdf_mock"  # Mock parsed PDF txt result
     )

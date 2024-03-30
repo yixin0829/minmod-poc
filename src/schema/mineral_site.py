@@ -45,12 +45,6 @@ class DepositType(str, Enum):
     unknown = "unknown"
 
 
-class CRS(str, Enum):
-    WGS84 = "WGS84"
-    UTM = "UTM"
-    unknown = "unknown"
-
-
 class BasicInfo(BaseModel):
     name: str = Field(description="The name of the mineral site.")
 
@@ -59,11 +53,11 @@ class LocationInfo(BaseModel):
     location: Optional[str] = Field(
         default="unknown",
         # Relaxed the location description to include easting and northing.
-        description="Polygon or Point, value indicates the geolocation of the mineral site, represented as `POINT(<latitude> <longitude>)`.",
+        description='latitude and longitude represented as "POINT (Lat Long)" in EPSG:4326 format.',
     )
-    crs: Optional[CRS] = Field(
+    crs: Optional[str] = Field(
         default="unknown",
-        description="The coordinate reference system (CRS) used for the mineral site's location.",
+        description="The coordinate reference system (CRS) used. For example, WGS84, UTM etc.",
     )
     country: Optional[str] = Field(
         default="unknown",
@@ -105,13 +99,9 @@ class MineralCommodity(BaseModel):
         default=-1,
         description="Cut-off grade value of an inventory item measured in cut-off grade unit.",
     )
-    contained_metal: Optional[float] = Field(
-        default=-1,
-        description="The quantity of a contained metal in an inventory item.",
-    )
     date: Optional[str] = Field(
         default="unknown",
-        description='When in the point of time mineral inventory valid. Format as "YYYY-mm".',
+        description='Effective date of mineral inventory, in "dd-mm-YYYY" format. For example, "01-01-2022".',
     )
     zone: Optional[str] = Field(
         default="unknown",
@@ -125,7 +115,11 @@ class MineralInventory(BaseModel):
 
 class DepositTypeCandidate(BaseModel):
     observed_name: DepositType = Field(
-        description="The name of the possible mineral deposit type."
+        description="The name of the predicted mineral deposit type."
+    )
+    confidence: Optional[float] = Field(
+        default=0,
+        description="The confidence level of the predicted mineral deposit type.",
     )
 
 

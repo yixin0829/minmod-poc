@@ -34,29 +34,11 @@ uri_to_str_mapping = {
 }
 
 
-def get_h1_tags(url):
-    try:
-        # Send a GET request to the URL
-        response = requests.get(url)
-
-        # Check if the request was successful (status code 200)
-        if response.status_code == 200:
-            # Parse the HTML content of the page using BeautifulSoup
-            soup = BeautifulSoup(response.text, "html.parser")
-
-            # Find all <h1> tags
-            h1_tags = soup.find_all("h1")
-
-            # Print the text of each <h1> tag
-            for tag in h1_tags:
-                print(tag.get_text().strip())
-        else:
-            print("Error: Failed to retrieve content from URL.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-
 def get_v(d: dict, k: str, default):
+    """
+    Wrapper method to get the value of a key from a dictionary with a default value.
+    if the value is a URI, map it to a string.
+    """
     if not isinstance(default, int) and k in d and d[k].startswith("http"):
         # map the uri to string
         return uri_to_str_mapping[d[k]]
@@ -64,7 +46,11 @@ def get_v(d: dict, k: str, default):
         return d.get(k, default)
 
 
-def transform_input_to_output(input_data: dict):
+def transform_inferlink_gt(input_data: dict):
+    """
+    Transform inferlink's ground truth JSON to the simplified schema defined in MineralSite.
+    """
+
     if isinstance(input_data["MineralSite"], list):
         mineral_site = input_data["MineralSite"][0]
     elif isinstance(input_data["MineralSite"], dict):
@@ -75,17 +61,17 @@ def transform_input_to_output(input_data: dict):
         "basic_info": {
             "name": mineral_site["name"],
         },
-        "location_info": {k: v for k, v in mineral_site["location_info"].items()},
+        "location_info": mineral_site["location_info"],
         "mineral_inventory": [],
         "deposit_type_candidate": [],
     }
 
-    # Transform mineral inventory
+    # Populate mineral inventory in output JSON
     for item in mineral_site["MineralInventory"]:
         parsed_item = {
             "commodity": get_v(item, "commodity", "unknown"),
             "category": get_v(item, "category", "unknown"),
-            "ore_unit": get_v(item, "ore_unit", "unknown"),
+            "ore_unit": get_v(item["ore"], "ore_unit", "unknown"),
             "ore_value": get_v(item["ore"], "ore_value", -1),
             "grade_unit": get_v(item["grade"], "grade_unit", "unknown"),
             "grade_value": get_v(item["grade"], "grade_value", -1),
@@ -123,17 +109,20 @@ def write_json_to_new_directory(file_name, output_dir, data):
         json.dump(data, json_file, indent=2)
 
 
-# Read all JSON from inferlink_gt_dir
-for file_name in sorted(os.listdir(Config.GROUND_TRUTH_INFERLINK_DIR)):
-    logger.info(f"Parsing {file_name}")
-    if file_name.endswith(".json"):
-        with open(os.path.join(Config.GROUND_TRUTH_INFERLINK_DIR, file_name), "r") as f:
-            input_json = json.load(f)
+if __name__ == "__main__":
+    # Read all JSON from inferlink_gt_dir
+    for file_name in sorted(os.listdir(Config.GROUND_TRUTH_INFERLINK_DIR)):
+        logger.info(f"Transforming {file_name}")
+        if file_name.endswith(".json"):
+            with open(
+                os.path.join(Config.GROUND_TRUTH_INFERLINK_DIR, file_name), "r"
+            ) as f:
+                input_json = json.load(f)
 
-    # Transform the input JSON to the output JSON
-    output_json = transform_input_to_output(input_json)
+        # Transform the input JSON to the output JSON
+        output_json = transform_inferlink_gt(input_json)
 
-    # Write the output JSON to a new directory
-    write_json_to_new_directory(
-        file_name, Config.GROUND_TRUTH_SIMPLIFIED_DIR, output_json
-    )
+        # Write the output JSON to a new directory
+        write_json_to_new_directory(
+            file_name, Config.GROUND_TRUTH_SIMPLIFIED_DIR, output_json
+        )

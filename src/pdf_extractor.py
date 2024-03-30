@@ -254,7 +254,9 @@ class PDFResponseParser(object):
                                 result.write(preprocessed_text + "\n")
 
                     # If the element is a paragraph, append the text to the result.txt file.
-                    elif element["Path"].startswith("//Document/P"):
+                    elif element["Path"].startswith("//Document/P") or element[
+                        "Path"
+                    ].startswith("//Document/Footnote"):
                         if element.get("Text"):
                             preprocessed_text = self._preprocess_text(
                                 element.get("Text")
@@ -316,11 +318,11 @@ class PDFResponseParser(object):
 
 if __name__ == "__main__":
     # Extract text and tables from a PDF file.
-    pdf_processor = PDFExtractor(Config.RAW_REPORTS_DIR, Config.PDF_EXTRACTION_DIR)
-    pdf_processor.process_pdf(
-        file_path="/home/yixin0829/minmod/minmod-poc/data/raw/mvt_zinc/reports_failed/Prairie Creek Zn Pb Ag 9-2017 FS.pdf"
-    )
+    # pdf_processor = PDFExtractor(Config.RAW_REPORTS_DIR, Config.PDF_EXTRACTION_DIR)
+    # pdf_processor.process_pdf(
+    #     file_path="/home/yixin0829/minmod/minmod-poc/data/raw/mvt_zinc/reports_failed/Prairie Creek Zn Pb Ag 9-2017 FS.pdf"
+    # )
 
     # Parse the result of the PDF extraction.
-    # parser = PDFResponseParser(Config.EXTRACTION_DIR, Config.PARSED_RESULT_DIR)
-    # parser.run(overwrite=True)
+    parser = PDFResponseParser(Config.PDF_EXTRACTION_DIR, Config.PARSED_PDF_DIR)
+    parser.run(overwrite=True)

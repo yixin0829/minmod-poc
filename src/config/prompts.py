@@ -1,5 +1,5 @@
 # Note that using mode="openai-json" may require explicit prompting (e.g., OpenAI requires that input messages contain the word “json” in some form when using this parameter).
-sys_prompt: str = """You extract information of interest from a given mineral report in structured JSON formats. The information of interest includes mineral site's name, location information, critical mineral inventory, and possible deposit types.
+sys_prompt: str = """You extract information of interest from a given mineral report in structured JSON formats. The information of interest includes mineral site's name, location information, mineral inventory, and possible deposit types.
 
 {format_instructions}"""
 

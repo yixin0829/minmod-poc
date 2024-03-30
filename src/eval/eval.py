@@ -1,22 +1,43 @@
-from langchain_benchmarks import clone_public_dataset, registry
-from loguru import logger
+import json
+import os
 
-task = registry["Email Extraction"]
-logger.info(f"Cloning {task.name} dataset")
-logger.info(f"Task description {task.description}")
+from langsmith import Client
+from langsmith.schemas import Example, Run
 
-clone_public_dataset(task.dataset_id, dataset_name=task.name)
 
-from langchain.chat_models import ChatOpenAI
-from langchain.output_parsers.openai_functions import JsonOutputFunctionsParser
+class MinModEvaluator:
+    def __init__(self) -> None:
+        pass
 
-llm = ChatOpenAI(model="gpt-3.5-turbo-16k", temperature=0).bind_functions(
-    functions=[task.schema],
-    function_call=task.schema.schema()["title"],
-)
+    def create_dataset(self):
+        """
+        Create a dataset on LangSmith for evaluating the MinMod extraction model on the MineralSite schema
+        """
 
-output_parser = JsonOutputFunctionsParser()
-extraction_chain = task.instructions | llm | output_parser | (lambda x: {"output": x})
+        # Inputs are provided to your model, so it know what to generate
+        dataset_inputs = []
+        # Outputs are provided to the evaluator, so it knows what to compare to
+        dataset_outputs = []
 
-from langchain_benchmarks.extraction import get_eval_config
-from langsmith.client import Client
+        # Read the txt files from parsed_pdf_w_gt directory and append to input list, then find corresponding output from simplified ground truth directory and append to output list
+        for file in os.listdir("data/asset/parsed_pdf_w_gt"):
+            with open(f"data/asset/parsed_pdf_w_gt/{file}/{file}.txt", "r") as f:
+                dataset_inputs.append({"input": f.read()})
+
+            with open(f"data/asset/ground_truth/simplified/{file}.json", "r") as f:
+                data = json.load(f)
+                dataset_outputs.append({"output": data})
+
+        client = Client()
+
+        # Storing inputs in a dataset lets us run chains and LLMs over a shared set of examples.
+        dataset = client.create_dataset(
+            dataset_name="MinMod Extraction Dataset",
+            description="Dataset for evaluating MinMod extraction model on MineralSite schema",
+        )
+
+        client.create_examples(
+            inputs=dataset_inputs,
+            outputs=dataset_outputs,
+            dataset_id=dataset.id,
+        )

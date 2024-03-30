@@ -47,7 +47,7 @@ class MinModExtractor(object):
             max_tokens=self.config.MAX_TOKENS,
         )
 
-    def extract_baseline(self, doc: str, output_schema: BaseModel) -> BaseModel:
+    def extract_baseline_runnable(self, output_schema: BaseModel):
         # Create a parser that handles parsing exceptions form PydanticOutputParser by calling LLM to fix the output
         parser_pydantic = PydanticOutputParser(pydantic_object=output_schema)
         parser_fixing = OutputFixingParser.from_llm(
@@ -74,10 +74,22 @@ class MinModExtractor(object):
         logger.info("Creating baseline structured extraction chain")
         chain = prompt | llm | parser_fixing
 
-        logger.info("Invoking the chain to extract info from input")
-        result = chain.invoke({"input": doc})
+        return chain
 
-        return result
+    def extract_baseline(self, inputs: dict) -> dict:
+        """
+        Extraction wrapper for the baseline method.
+
+        Args:
+            inputs (dict): The inputs to the extraction method. {"input": <doc>}
+        """
+
+        # Create baseline runnable
+        chain = self.extract_baseline_runnable(MineralSite)
+
+        # Invoke the chain and return dict
+        extracted_result = chain.invoke(inputs)
+        return {"output": extracted_result.model_dump()}
 
     def _llm_retriever_helper(self, query: str, doc: str) -> str:
         """
