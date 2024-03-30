@@ -4,11 +4,9 @@ import re
 
 from dotenv import load_dotenv
 from langchain.output_parsers import OutputFixingParser, PydanticOutputParser
-from langchain_community.vectorstores import Chroma
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
-from langchain_core.runnables import RunnableLambda, RunnablePassthrough
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_openai import ChatOpenAI
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 from loguru import logger
 from pydantic.v1 import BaseModel
@@ -49,9 +47,9 @@ class MinModExtractor(object):
 
     def extract_baseline_runnable(self, output_schema: BaseModel):
         # Create a parser that handles parsing exceptions form PydanticOutputParser by calling LLM to fix the output
-        parser_pydantic = PydanticOutputParser(pydantic_object=output_schema)
+        parser = PydanticOutputParser(pydantic_object=output_schema)
         parser_fixing = OutputFixingParser.from_llm(
-            llm=self.llm, parser=parser_pydantic, max_retries=1
+            llm=self.llm, parser=parser, max_retries=1
         )
 
         # Bind the LLM to the response format of the JSON object
@@ -60,15 +58,13 @@ class MinModExtractor(object):
         # Construct the prompt for the chat model
         prompt = ChatPromptTemplate.from_messages(
             [
-                ("system", prompts.sys_prompt),
+                ("system", prompts.SYS_PROMPT),
                 ("human", "{input}"),
             ]
         )
 
         # Format the prompt partially with the schema of the output model
-        prompt = prompt.partial(
-            format_instructions=parser_pydantic.get_format_instructions()
-        )
+        prompt = prompt.partial(format_instructions=parser.get_format_instructions())
 
         # Under the hood, this is similar to calling create_structured_output_runnable()
         logger.info("Creating baseline structured extraction chain")
@@ -99,7 +95,7 @@ class MinModExtractor(object):
 
         # Construct the prompt for LLM retrieval
         retrieval_prompt = PromptTemplate.from_template(
-            prompts.retrieval_template_strict
+            prompts.RETRIEVAL_TEMPLATE_STRICT
         )
 
         chain = retrieval_prompt | self.llm | parser_str
@@ -148,8 +144,8 @@ class MinModExtractor(object):
         # * Construct the prompt for LLM extraction (different than baseline)
         prompt = ChatPromptTemplate.from_messages(
             [
-                ("system", prompts.sys_prompt),
-                ("human", prompts.extraction_template),
+                ("system", prompts.SYS_PROMPT),
+                ("human", prompts.EXTRACTION_TEMPLATE),
             ]
         )
 
@@ -172,10 +168,10 @@ class MinModExtractor(object):
     def extract_llm_retriever(self, doc: str, output_schema: MineralSite) -> BaseModel:
         extraction_result = []
         query_schema_pairs = [
-            (prompts.basic_info_query, BasicInfo),
-            (prompts.location_info_query, LocationInfo),
-            (prompts.mineral_inventory_query, MineralInventory),
-            (prompts.deposit_type_query, DepositTypeCandidates),
+            (prompts.BASIC_INFO_QUERY, BasicInfo),
+            (prompts.LOCATION_INFO_QUERY, LocationInfo),
+            (prompts.MINERAL_INVENTORY_QUERY, MineralInventory),
+            (prompts.DEPOSIT_TYPE_QUERY, DepositTypeCandidates),
         ]
 
         for query, schema in query_schema_pairs:

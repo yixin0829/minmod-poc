@@ -54,11 +54,16 @@ class Config:
     LOGGING_LEVEL: any = logging.INFO
 
     ##### MinMod extractor settings #####
-    MODEL_NAME: str = LLMModel.GPT_3_5_TURBO.value
-    TEMPERATURE: float = 0.5
+    MODEL_NAME: str = LLMModel.GPT_4_TURBO.value
+    # MODEL_NAME: str = LLMModel.GPT_3_5_TURBO.value
+    TEMPERATURE: float = 0
     MAX_TOKENS: int = 2048
     MINMOD_BULK_EXTRACTION_OVERWRITE: bool = True
 
     def minmod_extraction_dir(self, method: ExtractionMethod) -> str:
         """Return the directory for the MinMod extraction result of the specified method."""
         return f"{self.MINMOD_EXTRACTION_BASE_DIR}/{method.value}"
+
+    ##### Evaluation settings #####
+    EVAL_DATASET: str = "MinMod Extraction Dataset"
+    EVAL_DATASET_TEST: str = "MinMod Extraction Test"

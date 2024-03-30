@@ -51,20 +51,15 @@ class BasicInfo(BaseModel):
 
 class LocationInfo(BaseModel):
     location: Optional[str] = Field(
-        default="unknown",
-        # Relaxed the location description to include easting and northing.
         description='latitude and longitude represented as "POINT (Lat Long)" in EPSG:4326 format.',
     )
     crs: Optional[str] = Field(
-        default="unknown",
         description="The coordinate reference system (CRS) used. For example, WGS84, UTM etc.",
     )
     country: Optional[str] = Field(
-        default="unknown",
         description="The country where the mineral site is located.",
     )
     state_or_province: Optional[str] = Field(
-        default="unknown",
         description="The state or province where the mineral site is located.",
     )
 
@@ -74,37 +69,30 @@ class MineralCommodity(BaseModel):
         description="The commodity of an mineral inventory item."
     )
     category: Optional[MineralCategory] = Field(
-        default="unknown",
         description="The category of an mineral inventory item.",
     )
     ore_unit: Optional[WeightUnits] = Field(
-        default="unknown",
         description="The unit in which ore quantity is measured, eg, tonnes.",
     )
     ore_value: Optional[float] = Field(
-        default=-1, description="The value of ore quantity measured in ore unit."
+        description="The value of ore quantity measured in ore unit."
     )
     grade_unit: Optional[GradeUnits] = Field(
-        default="unknown",
         description="The unit in which grade is measured, eg, percent.",
     )
     grade_value: Optional[float] = Field(
-        default=-1, description="The value of grade measured in grade unit."
+        description="The value of grade measured in grade unit."
     )
     cutoff_grade_unit: Optional[GradeUnits] = Field(
-        default="unknown",
         description="Cut-off grade unit of an inventory item.",
     )
     cutoff_grade_value: Optional[float] = Field(
-        default=-1,
         description="Cut-off grade value of an inventory item measured in cut-off grade unit.",
     )
     date: Optional[str] = Field(
-        default="unknown",
         description='Effective date of mineral inventory, in "dd-mm-YYYY" format. For example, "01-01-2022".',
     )
     zone: Optional[str] = Field(
-        default="unknown",
         description="Zone of mineral site where the mineral commodity was discovered.",
     )
 

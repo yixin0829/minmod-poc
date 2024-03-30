@@ -19,7 +19,7 @@ class Retriever(object):
             openai_api_key=os.environ["OPENAI_API_KEY"]
         )
 
-    def run():
+    def run(self):
         docs = self.load_docs()
 
     def load_docs(self, path) -> list[Document]:
