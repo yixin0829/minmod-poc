@@ -15,7 +15,7 @@ from langsmith.schemas import Example, Run
 import config.prompts as prompts
 from config.config import Config, ExtractionMethod
 from schema.mineral_site import MineralSite
-from src.minmod_extractor.extractor import MinModExtractor
+from src.extractor_minmod.extractor import ExtractorBaseline
 
 
 class BasicInfoEvaluator(RunEvaluator):
@@ -75,7 +75,7 @@ class LocationInfoEvaluator(RunEvaluator):
 
 class MineralInventoryEvaluator(RunEvaluator):
     def __init__(self):
-        llm = ChatOpenAI(model="gpt-4", temperature=0)
+        llm = ChatOpenAI(model=Config.EVAL_MODEL_NAME, temperature=0)
         template = prompts.INVENTORY_EVAL_TEMPLATE
 
         self.eval_chain = (
@@ -206,13 +206,9 @@ class MinModEvaluator:
 
 if __name__ == "__main__":
     evaluator = MinModEvaluator()
-    extractor = MinModExtractor()
+    extractor_baseline = ExtractorBaseline()
+    runnable_baseline = extractor_baseline.get_runnable(MineralSite)
 
-    #! Change this to evaluate different methods
-    baseline_runnable = extractor.extract_baseline_runnable(MineralSite)
-
-    #! Change this to evaluate on a small the test set
     dataset_name = Config.EVAL_DATASET
-    # dataset_name = Config.EVAL_DATASET_TEST
 
-    evaluator.evaluate(dataset_name, baseline_runnable)
+    evaluator.evaluate(dataset_name, runnable_baseline)

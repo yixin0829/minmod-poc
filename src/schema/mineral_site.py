@@ -6,7 +6,6 @@ from pydantic.v1 import BaseModel, Field
 
 class WeightUnits(str, Enum):
     tonnes = "tonnes"
-    m_tonnes = "million tonnes"
     kg = "kilograms"
     unknown = "unknown"
 
@@ -103,16 +102,15 @@ class MineralInventory(BaseModel):
 
 class DepositTypeCandidate(BaseModel):
     observed_name: DepositType = Field(
-        description="The name of the predicted mineral deposit type."
+        description="The name of the mineral deposit type."
     )
     confidence: Optional[float] = Field(
-        default=0,
-        description="The confidence level of the predicted mineral deposit type.",
+        description="The confidence level of the mineral deposit type from 0 to 1.",
     )
 
 
 class DepositTypeCandidates(BaseModel):
-    deposit_type_candidate: list[DepositTypeCandidate]
+    candidates: list[DepositTypeCandidate]
 
 
 class MineralSite(BaseModel):

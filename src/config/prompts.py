@@ -14,7 +14,7 @@ Here is the document, enclosed in <document></document> XML tags:
 </document>
 """
 
-BASIC_INFO_QUERY: str = """the mineral site's name"""
+BASIC_INFO_QUERY: str = """the name of the mineral site or property"""
 
 LOCATION_INFO_QUERY: str = (
     """the mineral site's location, coordinate reference system used, the country and state or province where the mineral site is located in"""
@@ -48,3 +48,7 @@ PREDICTED JSON: {pred}
 REFERENCE JSON: {ref}
 --------
 Reason step by step about why the score is appropriate in one paragraph, then print the score at the end. At the end, repeat that score alone on a new line."""
+
+SYS_PROMPT_VECTOR_RETRIEVAL: str = """You extract information of interest from a given mineral report in structured JSON formats. The information of interest includes {query}.
+
+{format_instructions}"""

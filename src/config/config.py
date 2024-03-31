@@ -15,9 +15,16 @@ class LLMModel(str, Enum):
     GPT_3_5_TURBO = "gpt-3.5-turbo"
 
 
+class LangSmithDataset(str, Enum):
+    MINMOD_EXTRACTION = "MinMod Extraction Dataset"
+    MINMOD_EXTRACTION_TEST = "MinMod Extraction Test"
+
+
 @dataclass
 class Config:
-    ##### General settings #####
+    ##############################################################
+    #####@ General settings #####
+    ##############################################################
     # Raw data directories
     RAW_REPORTS_DIR: str = "data/raw/mvt_zinc/reports"  # Remaining Raw reports
     RAW_REPORTS_DIR_FAILED: str = (
@@ -46,16 +53,22 @@ class Config:
         "data/asset/extraction_minmod"  # MinMod extraction result
     )
 
-    ##### PDF extractor settings #####
+    ##############################################################
+    #####@ PDF extractor settings #####
+    ##############################################################
     PDF_PARSER_OVERWRITE: bool = False
 
-    ##### Logging settings #####
+    ##############################################################
+    #####@ Logging settings #####
+    ##############################################################
     LOGGING_DIR: str = "logs"
     LOGGING_LEVEL: any = logging.INFO
 
-    ##### MinMod extractor settings #####
-    MODEL_NAME: str = LLMModel.GPT_4_TURBO.value
-    # MODEL_NAME: str = LLMModel.GPT_3_5_TURBO.value
+    ##############################################################
+    #####@ MinMod extractor settings #####
+    ##############################################################
+    # MODEL_NAME: str = LLMModel.GPT_4_TURBO.value
+    MODEL_NAME: str = LLMModel.GPT_3_5_TURBO.value
     TEMPERATURE: float = 0
     MAX_TOKENS: int = 2048
     MINMOD_BULK_EXTRACTION_OVERWRITE: bool = True
@@ -64,6 +77,10 @@ class Config:
         """Return the directory for the MinMod extraction result of the specified method."""
         return f"{self.MINMOD_EXTRACTION_BASE_DIR}/{method.value}"
 
-    ##### Evaluation settings #####
-    EVAL_DATASET: str = "MinMod Extraction Dataset"
-    EVAL_DATASET_TEST: str = "MinMod Extraction Test"
+    ##############################################################
+    #####@ Evaluation settings #####
+    ##############################################################
+    # EVAL_MODEL_NAME: str = LLMModel.GPT_4_TURBO.value
+    EVAL_MODEL_NAME: str = LLMModel.GPT_3_5_TURBO.value
+    # EVAL_DATASET: str = LangSmithDataset.MINMOD_EXTRACTION.value
+    EVAL_DATASET: str = LangSmithDataset.MINMOD_EXTRACTION_TEST.value

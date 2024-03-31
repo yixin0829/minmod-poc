@@ -4,9 +4,11 @@ import re
 
 from dotenv import load_dotenv
 from langchain.output_parsers import OutputFixingParser, PydanticOutputParser
+from langchain_community.vectorstores.chroma import Chroma
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
-from langchain_openai import ChatOpenAI
+from langchain_core.runnables import RunnableParallel, RunnablePassthrough
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 from loguru import logger
 from pydantic.v1 import BaseModel
@@ -36,7 +38,7 @@ logger.add(
 load_dotenv()
 
 
-class MinModExtractor(object):
+class ExtractorBaseline(object):
     def __init__(self, config: Config) -> None:
         self.config = config
         self.llm = ChatOpenAI(
@@ -45,7 +47,7 @@ class MinModExtractor(object):
             max_tokens=self.config.MAX_TOKENS,
         )
 
-    def extract_baseline_runnable(self, output_schema: BaseModel):
+    def get_runnable(self, output_schema: BaseModel):
         # Create a parser that handles parsing exceptions form PydanticOutputParser by calling LLM to fix the output
         parser = PydanticOutputParser(pydantic_object=output_schema)
         parser_fixing = OutputFixingParser.from_llm(
@@ -72,7 +74,7 @@ class MinModExtractor(object):
 
         return chain
 
-    def extract_baseline(self, inputs: dict) -> dict:
+    def extract(self, inputs: dict, output_schema: BaseModel):
         """
         Extraction wrapper for the baseline method.
 
@@ -81,11 +83,16 @@ class MinModExtractor(object):
         """
 
         # Create baseline runnable
-        chain = self.extract_baseline_runnable(MineralSite)
+        chain = self.get_runnable(output_schema)
 
         # Invoke the chain and return dict
-        extracted_result = chain.invoke(inputs)
-        return {"output": extracted_result.model_dump()}
+        result = chain.invoke(inputs)
+        return {"output": result.dict()}
+
+
+class ExtractorLLMRetriever(object):
+    def __init__(self) -> None:
+        pass
 
     def _llm_retriever_helper(self, query: str, doc: str) -> str:
         """
@@ -200,20 +207,6 @@ class MinModExtractor(object):
 
         return result
 
-    def extract_vector_retriever_runnable(
-        self, doc: str, output_schema: BaseModel
-    ) -> BaseModel:
-        """Construct a runnable for the vector retriever extraction method."""
-        # TODO: implement a multi-vector retriever to store raw tables, text along with table summaries
-        headers_to_split_on = [
-            ("#", "Header 1"),
-            ("##", "Header 2"),
-            ("###", "Header 3"),
-        ]
-
-        md_splitter = MarkdownHeaderTextSplitter(headers_to_split_on)
-        md_header_splits = md_splitter.split_text(doc)
-
     def bulk_extract(self, input_dir: str, method: ExtractionMethod, overwrite: bool):
         """
         Call different extraction methods on documents in the parsed directory.
@@ -308,6 +301,117 @@ class MinModExtractor(object):
         )
 
 
+class ExtractorVectorRetriever(object):
+    def __init__(self, config: Config) -> None:
+        self.config = config
+        self.llm = ChatOpenAI(
+            model=self.config.MODEL_NAME,
+            temperature=self.config.TEMPERATURE,
+            max_tokens=self.config.MAX_TOKENS,
+        )
+
+    def get_runnable(self, output_schema: BaseModel):
+        """Construct a runnable for the vector retriever extraction method."""
+
+        # Create a parser that handles parsing exceptions form PydanticOutputParser by calling LLM to fix the output
+        parser = PydanticOutputParser(pydantic_object=output_schema)
+        parser_fixing = OutputFixingParser.from_llm(
+            llm=self.llm, parser=parser, max_retries=1
+        )
+
+        # Bind the LLM to the response format of the JSON object
+        llm = self.llm.bind(response_format={"type": "json_object"})
+
+        # Construct the prompt for the chat model
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", prompts.SYS_PROMPT_VECTOR_RETRIEVAL),
+                ("human", "{input}"),
+            ]
+        )
+        prompt = prompt.partial(format_instructions=parser.get_format_instructions())
+
+        retriever = self.retriever_factory()
+        setup_and_retrieval = RunnableParallel(
+            {"input": retriever, "query": RunnablePassthrough()}
+        )
+
+        logger.info("Creating vector retriever structured extraction chain")
+        chain = setup_and_retrieval | prompt | llm | parser_fixing
+
+        return chain
+
+    def extract(self, doc: str, output_schema: BaseModel):
+        # Create extraction chains
+        chain_basic_info = self.get_runnable(BasicInfo)
+        chain_location_info = self.get_runnable(LocationInfo)
+        chain_mineral_inventory = self.get_runnable(MineralInventory)
+        chain_deposit_type = self.get_runnable(DepositTypeCandidates)
+
+        # Invoke the chains for queries to extract different information
+        result_basic_info = chain_basic_info.invoke(prompts.BASIC_INFO_QUERY)
+        result_location_info = chain_location_info.invoke(prompts.LOCATION_INFO_QUERY)
+        result_mineral_inventory: MineralInventory = chain_mineral_inventory.invoke(
+            prompts.MINERAL_INVENTORY_QUERY
+        )
+        result_deposit_type: DepositTypeCandidates = chain_deposit_type.invoke(
+            prompts.DEPOSIT_TYPE_QUERY
+        )
+
+        # Construct the MineralSite model
+        try:
+            result = output_schema(
+                basic_info=result_basic_info,
+                location_info=result_location_info,
+                mineral_inventory=result_mineral_inventory.mineral_inventory,
+                deposit_type_candidate=result_deposit_type.candidates,
+            )
+        except ValidationError as e:
+            logger.error(f"Failed to validate the extraction result: {e.errors()}")
+
+        return {"output": result.dict()}
+
+    def retriever_factory(self):
+        # TODO: load PDF using Azure AI Doc Intelli resource
+
+        # Read markdown file parsed by azure ai
+        with open(
+            "/home/yixin0829/minmod/minmod-poc/notebooks/azure_ai_parse_result.md", "r"
+        ) as f:
+            markdown_document = f.read()
+
+        headers_to_split_on = [
+            # ("#", "Header 1"),  # In markdown, 2.\ is used for header 1
+            ("##", "Header 2"),
+            ("###", "Header 3"),
+        ]
+
+        # Split parsed PDF in markdown into chunks
+        markdown_splitter = MarkdownHeaderTextSplitter(headers_to_split_on)
+        md_header_splits = markdown_splitter.split_text(markdown_document)
+
+        embedding_function = OpenAIEmbeddings(model="text-embedding-3-large")
+        LOAD_CACHED_EMBEDDINGS = True  # load cached embeddings from disk
+
+        if LOAD_CACHED_EMBEDDINGS:
+            # load from disk
+            vector_db = Chroma(
+                persist_directory="/home/yixin0829/minmod/minmod-poc/.chroma_db",
+                embedding_function=embedding_function,
+            )
+        else:
+            # Create a vector database from the documents
+            vector_db = Chroma.from_documents(
+                md_header_splits,
+                embedding_function,
+                persist_directory="/home/yixin0829/minmod/minmod-poc/.chroma_db",
+            )
+
+        # Create a retriever from the vector database
+        retriever = vector_db.as_retriever()
+        return retriever
+
+
 if __name__ == "__main__":
     docs_w_ground_truth = [
         "data/asset/parsed_result/Bleiberg_Pb_Zn_5-2017/Bleiberg_Pb_Zn_5-2017.txt",
@@ -325,16 +429,6 @@ if __name__ == "__main__":
 
     # Extract information from documents in the parsed directory
     config = Config()
-    extractor = MinModExtractor(config)
-
-    # extractor.single_extract(
-    #     file_path="data/asset/parsed_result_w_gt/Bongará_Zn_3-2019/Bongará_Zn_3-2019.txt",
-    #     method=ExtractionMethod.BASELINE,
-    #     overwrite=True,
-    # )
-
-    # extractor.bulk_extract(
-    #     input_dir=Config.PARSED_RESULT_MOCK_DIR,
-    #     method=ExtractionMethod.BASELINE,
-    #     overwrite=Config.MINMOD_BULK_EXTRACTION_OVERWRITE,
-    # )
+    extractor_baseline = ExtractorBaseline(config)
+    extractor_vector_retriever = ExtractorVectorRetriever(config)
+    print(extractor_vector_retriever.extract("", MineralSite))
