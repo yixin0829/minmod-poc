@@ -14,8 +14,8 @@ from langsmith.schemas import Example, Run
 
 import config.prompts as prompts
 from config.config import Config, ExtractionMethod
+from extractor_minmod.extractor import ExtractorBaseline, ExtractorVectorRetriever
 from schema.mineral_site import MineralSite
-from src.extractor_minmod.extractor import ExtractorBaseline
 
 
 class BasicInfoEvaluator(RunEvaluator):
@@ -196,19 +196,29 @@ class MinModEvaluator:
             dataset_name=dataset_name,
             llm_or_chain_factory=llm_or_chain_factory,
             evaluation=self.eval_config,
+            concurrency_level=1,
             project_metadata={
                 "model": Config.MODEL_NAME,
-                "inventory_eval_model": Config.MODEL_NAME,
-                "extraction_method": ExtractionMethod.BASELINE.value,
+                "eval_model": Config.EVAL_MODEL_NAME,
+                "extraction_method": Config.EVAL_METHOD.value,
             },
         )
 
 
 if __name__ == "__main__":
     evaluator = MinModEvaluator()
-    extractor_baseline = ExtractorBaseline()
-    runnable_baseline = extractor_baseline.get_runnable(MineralSite)
 
-    dataset_name = Config.EVAL_DATASET
+    extractor_baseline = ExtractorBaseline(Config())
+    extractor_vector_retriever = ExtractorVectorRetriever(Config())
 
-    evaluator.evaluate(dataset_name, runnable_baseline)
+    # Option 1: Evalute llm or chain constructor
+    # evaluator.evaluate_llm_or_chain(
+    #     dataset_name=Config.EVAL_DATASET,
+    #     llm_or_chain_factory=extractor_baseline.get_runnable(MineralSite)
+    # )
+
+    # Option 2: Evaluate custom functions
+    evaluator.evaluate(
+        dataset_name=Config.EVAL_DATASET,
+        llm_or_chain_factory=extractor_vector_retriever.extract_eval,
+    )

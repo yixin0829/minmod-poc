@@ -40,7 +40,7 @@ log_directory = Config.LOGGING_DIR
 os.makedirs(log_directory, exist_ok=True)
 # Generate the log filename with the current timestamp
 timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-log_filename = f"pdf_extractor_{timestamp}.log"
+log_filename = f"adobe_pdf_extractor_{timestamp}.log"
 log_path = os.path.join(log_directory, log_filename)
 
 # Configure logging
@@ -324,5 +324,5 @@ if __name__ == "__main__":
     # )
 
     # Parse the result of the PDF extraction.
-    parser = PDFResponseParser(Config.PDF_EXTRACTION_DIR, Config.PARSED_PDF_DIR)
+    parser = PDFResponseParser(Config.PDF_EXTRACTION_DIR, Config.PARSED_PDF_DIR_ADOBE)
     parser.run(overwrite=True)

@@ -7,7 +7,6 @@ from pydantic.v1 import BaseModel, Field
 class WeightUnits(str, Enum):
     tonnes = "tonnes"
     kg = "kilograms"
-    unknown = "unknown"
 
 
 class GradeUnits(str, Enum):
@@ -17,7 +16,6 @@ class GradeUnits(str, Enum):
     lead_eq_percent = "lead equivalence percent"
     us_dollar_per_tonne = "US dollar per tonne"
     zn_eq_percent = "zinc equivalence percent"
-    unknown = "unknown"
 
 
 class Commodity(str, Enum):
@@ -33,7 +31,6 @@ class MineralCategory(str, Enum):
     measured = "measured"
     probable = "probable"
     proven = "proven"
-    unknown = "unknown"
 
 
 class DepositType(str, Enum):
@@ -41,7 +38,6 @@ class DepositType(str, Enum):
     siliciclastic_mafic_zinc_lead = "Siliciclastic-mafic zinc-lead"
     mvt_zinc_lead = "MVT zinc-lead"
     irish_type_zinc = "Irish-type sediment-hosted zinc-lead"
-    unknown = "unknown"
 
 
 class BasicInfo(BaseModel):

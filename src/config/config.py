@@ -17,13 +17,15 @@ class LLMModel(str, Enum):
 
 class LangSmithDataset(str, Enum):
     MINMOD_EXTRACTION = "MinMod Extraction Dataset"
-    MINMOD_EXTRACTION_TEST = "MinMod Extraction Test"
+    MINMOD_EXTRACTION_TEST = "MinMod Extraction Dataset Test"
+    MINMOD_EXTRACTION_2 = "MinMod Extraction Dataset 2"
+    MINMOD_EXTRACTION_2_TEST = "MinMod Extraction Dataset 2 Test"
 
 
 @dataclass
 class Config:
     ##############################################################
-    #####@ General settings #####
+    # General settings
     ##############################################################
     # Raw data directories
     RAW_REPORTS_DIR: str = "data/raw/mvt_zinc/reports"  # Remaining Raw reports
@@ -42,45 +44,46 @@ class Config:
     GROUND_TRUTH_SIMPLIFIED_DIR: str = (
         "data/asset/ground_truth/simplified"  # Simplified ground truth that conforms to MineralSite schema
     )
-    PARSED_PDF_DIR: str = "data/asset/parsed_pdf"  # Parsed PDF txt result
-    PARSED_PDF_MOCK_DIR: str = (
-        "data/asset/parsed_pdf_mock"  # Mock parsed PDF txt result
+    PARSED_PDF_DIR_ADOBE: str = (
+        "data/asset/parsed_pdf_adobe"  # Parsed PDF result using Adobe
+    )
+    PARSED_PDF_DIR_AZURE: str = (
+        "data/asset/parsed_pdf_azure"  # Parsed PDF result using azure
     )
     PARSED_PDF_W_GT_DIR: str = (
-        "data/asset/parsed_pdf_w_gt"  # Parsed PDF txt with ground truth
+        "data/asset/parsed_pdf_w_gt"  # Parsed PDF (Adobe) with ground truth
     )
     MINMOD_EXTRACTION_BASE_DIR: str = (
         "data/asset/extraction_minmod"  # MinMod extraction result
     )
 
     ##############################################################
-    #####@ PDF extractor settings #####
+    # PDF extractor settings
     ##############################################################
     PDF_PARSER_OVERWRITE: bool = False
 
     ##############################################################
-    #####@ Logging settings #####
+    # Logging settings
     ##############################################################
     LOGGING_DIR: str = "logs"
     LOGGING_LEVEL: any = logging.INFO
 
     ##############################################################
-    #####@ MinMod extractor settings #####
+    # MinMod extractor settings
     ##############################################################
-    # MODEL_NAME: str = LLMModel.GPT_4_TURBO.value
-    MODEL_NAME: str = LLMModel.GPT_3_5_TURBO.value
+    MODEL_NAME: str = LLMModel.GPT_4_TURBO.value
     TEMPERATURE: float = 0
     MAX_TOKENS: int = 2048
     MINMOD_BULK_EXTRACTION_OVERWRITE: bool = True
+    EMBEDDING_FUNCTION: str = "text-embedding-3-large"
 
     def minmod_extraction_dir(self, method: ExtractionMethod) -> str:
         """Return the directory for the MinMod extraction result of the specified method."""
         return f"{self.MINMOD_EXTRACTION_BASE_DIR}/{method.value}"
 
     ##############################################################
-    #####@ Evaluation settings #####
+    # Evaluation settings
     ##############################################################
-    # EVAL_MODEL_NAME: str = LLMModel.GPT_4_TURBO.value
-    EVAL_MODEL_NAME: str = LLMModel.GPT_3_5_TURBO.value
-    # EVAL_DATASET: str = LangSmithDataset.MINMOD_EXTRACTION.value
-    EVAL_DATASET: str = LangSmithDataset.MINMOD_EXTRACTION_TEST.value
+    EVAL_METHOD: ExtractionMethod = ExtractionMethod.VECTOR_RETRIEVER
+    EVAL_MODEL_NAME: str = LLMModel.GPT_4_TURBO.value
+    EVAL_DATASET: str = LangSmithDataset.MINMOD_EXTRACTION_2_TEST.value

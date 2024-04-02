@@ -4,6 +4,7 @@ import re
 
 from dotenv import load_dotenv
 from langchain.output_parsers import OutputFixingParser, PydanticOutputParser
+from langchain.retrievers.multi_query import MultiQueryRetriever
 from langchain_community.vectorstores.chroma import Chroma
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
@@ -51,7 +52,9 @@ class ExtractorBaseline(object):
         # Create a parser that handles parsing exceptions form PydanticOutputParser by calling LLM to fix the output
         parser = PydanticOutputParser(pydantic_object=output_schema)
         parser_fixing = OutputFixingParser.from_llm(
-            llm=self.llm, parser=parser, max_retries=1
+            llm=ChatOpenAI(model="gpt-4-turbo-preview", temperature=0),
+            parser=parser,
+            max_retries=1,
         )
 
         # Bind the LLM to the response format of the JSON object
@@ -310,43 +313,73 @@ class ExtractorVectorRetriever(object):
             max_tokens=self.config.MAX_TOKENS,
         )
 
-    def get_runnable(self, output_schema: BaseModel):
+    def retriever_factory(self, doc_name: str):
+        with open(os.path.join(Config.PARSED_PDF_DIR_AZURE, doc_name), "r") as f:
+            markdown_document = f.read()
+
+        headers_to_split_on = [
+            # ("#", "Header 1"),  # In markdown, 2.\ is used for header 1
+            ("##", "Header 2"),
+            ("###", "Header 3"),
+        ]
+
+        markdown_splitter = MarkdownHeaderTextSplitter(headers_to_split_on)
+        md_header_splits = markdown_splitter.split_text(markdown_document)
+
+        embedding_function = OpenAIEmbeddings(model=Config.EMBEDDING_FUNCTION)
+
+        vector_db = Chroma.from_documents(
+            md_header_splits,
+            embedding_function,
+            # persist_directory="/home/yixin0829/minmod/minmod-poc/.chroma_db",
+        )
+
+        # Creating a retriever from the vector database
+        retriever = vector_db.as_retriever(search_type="similarity")
+
+        retriever_from_llm = MultiQueryRetriever.from_llm(
+            retriever=retriever, llm=ChatOpenAI(temperature=0)
+        )
+        return retriever_from_llm
+
+    def get_runnable(self, doc_name: str, output_schema: BaseModel):
         """Construct a runnable for the vector retriever extraction method."""
 
         # Create a parser that handles parsing exceptions form PydanticOutputParser by calling LLM to fix the output
         parser = PydanticOutputParser(pydantic_object=output_schema)
         parser_fixing = OutputFixingParser.from_llm(
-            llm=self.llm, parser=parser, max_retries=1
+            llm=ChatOpenAI(model="gpt-4-turbo-preview", temperature=0),
+            parser=parser,
+            max_retries=1,
         )
 
         # Bind the LLM to the response format of the JSON object
         llm = self.llm.bind(response_format={"type": "json_object"})
 
-        # Construct the prompt for the chat model
         prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", prompts.SYS_PROMPT_VECTOR_RETRIEVAL),
-                ("human", "{input}"),
+                ("human", "Relevant sections: {input}"),
             ]
         )
         prompt = prompt.partial(format_instructions=parser.get_format_instructions())
 
-        retriever = self.retriever_factory()
+        retriever = self.retriever_factory(doc_name)
         setup_and_retrieval = RunnableParallel(
             {"input": retriever, "query": RunnablePassthrough()}
         )
 
-        logger.info("Creating vector retriever structured extraction chain")
+        # Creating vector retriever structured extraction chain
         chain = setup_and_retrieval | prompt | llm | parser_fixing
 
         return chain
 
-    def extract(self, doc: str, output_schema: BaseModel):
+    def extract(self, doc_name: str, output_schema: BaseModel) -> BaseModel:
         # Create extraction chains
-        chain_basic_info = self.get_runnable(BasicInfo)
-        chain_location_info = self.get_runnable(LocationInfo)
-        chain_mineral_inventory = self.get_runnable(MineralInventory)
-        chain_deposit_type = self.get_runnable(DepositTypeCandidates)
+        chain_basic_info = self.get_runnable(doc_name, BasicInfo)
+        chain_location_info = self.get_runnable(doc_name, LocationInfo)
+        chain_mineral_inventory = self.get_runnable(doc_name, MineralInventory)
+        chain_deposit_type = self.get_runnable(doc_name, DepositTypeCandidates)
 
         # Invoke the chains for queries to extract different information
         result_basic_info = chain_basic_info.invoke(prompts.BASIC_INFO_QUERY)
@@ -367,66 +400,20 @@ class ExtractorVectorRetriever(object):
                 deposit_type_candidate=result_deposit_type.candidates,
             )
         except ValidationError as e:
-            logger.error(f"Failed to validate the extraction result: {e.errors()}")
-
-        return {"output": result.dict()}
-
-    def retriever_factory(self):
-        # TODO: load PDF using Azure AI Doc Intelli resource
-
-        # Read markdown file parsed by azure ai
-        with open(
-            "/home/yixin0829/minmod/minmod-poc/notebooks/azure_ai_parse_result.md", "r"
-        ) as f:
-            markdown_document = f.read()
-
-        headers_to_split_on = [
-            # ("#", "Header 1"),  # In markdown, 2.\ is used for header 1
-            ("##", "Header 2"),
-            ("###", "Header 3"),
-        ]
-
-        # Split parsed PDF in markdown into chunks
-        markdown_splitter = MarkdownHeaderTextSplitter(headers_to_split_on)
-        md_header_splits = markdown_splitter.split_text(markdown_document)
-
-        embedding_function = OpenAIEmbeddings(model="text-embedding-3-large")
-        LOAD_CACHED_EMBEDDINGS = True  # load cached embeddings from disk
-
-        if LOAD_CACHED_EMBEDDINGS:
-            # load from disk
-            vector_db = Chroma(
-                persist_directory="/home/yixin0829/minmod/minmod-poc/.chroma_db",
-                embedding_function=embedding_function,
-            )
-        else:
-            # Create a vector database from the documents
-            vector_db = Chroma.from_documents(
-                md_header_splits,
-                embedding_function,
-                persist_directory="/home/yixin0829/minmod/minmod-poc/.chroma_db",
+            logger.error(
+                f"Failed to validate the pydantic extraction result: {e.errors()}"
             )
 
-        # Create a retriever from the vector database
-        retriever = vector_db.as_retriever()
-        return retriever
+        return result
+
+    def extract_eval(self, inputs: dict):
+        """Wrapper function for evaluation in LangSmith."""
+        doc_name = inputs["input"]
+        result = self.extract(doc_name + ".md", MineralSite)
+        return {"output": result}
 
 
 if __name__ == "__main__":
-    docs_w_ground_truth = [
-        "data/asset/parsed_result/Bleiberg_Pb_Zn_5-2017/Bleiberg_Pb_Zn_5-2017.txt",
-        "data/asset/parsed_result/Bongará_Zn_3-2019/Bongará_Zn_3-2019.txt",
-        "data/asset/parsed_result/Hakkari_Zn_3-2010/Hakkari_Zn_3-2010.txt",
-        "data/asset/parsed_result/Hakkari_Zn_7-2013/Hakkari_Zn_7-2013.txt",
-        "data/asset/parsed_result/Hakkira_Zn_4-2011/Hakkira_Zn_4-2011.txt",
-        "data/asset/parsed_result/Mehdiabad_Zn_3-2005/Mehdiabad_Zn_3-2005.txt",
-        "data/asset/parsed_result/Reocin_Zn_3-2002/Reocin_Zn_3-2002.txt",
-    ]
-
-    docs_mock = [
-        "data/asset/parsed_result_mock/Bongará_Zn_3-2019_mock.txt",
-    ]
-
     # Extract information from documents in the parsed directory
     config = Config()
     extractor_baseline = ExtractorBaseline(config)
