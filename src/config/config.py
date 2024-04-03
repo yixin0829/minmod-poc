@@ -4,18 +4,27 @@ from enum import Enum
 
 
 class ExtractionMethod(str, Enum):
-    # Baseline: extraction using long-context LLM + entire output schema
+    # Baseline: extraction using LLM + entire report + output schema
     BASELINE = "baseline"
+    # LLM retriever: extraction using LLM + LLM-retrieved relevant sections of the report + output schema
     LLM_RETRIEVER = "llm_retriever"
+    # Vector retriever: extraction using LLM + vector-retrieved relevant sections of the report + output schema
     VECTOR_RETRIEVER = "vector_retriever"
 
 
 class LLMModel(str, Enum):
+    # For more, see https://platform.openai.com/docs/guides/text-generation
     GPT_4_TURBO = "gpt-4-turbo-preview"
     GPT_3_5_TURBO = "gpt-3.5-turbo"
 
 
-class LangSmithDataset(str, Enum):
+class EmbeddingFunction(str, Enum):
+    # For more, see https://platform.openai.com/docs/guides/embeddings/embedding-models
+    TEXT_EMBEDDING_3_LARGE = "text-embedding-3-large"
+    TEXT_EMBEDDING_3_SMALL = "text-embedding-3-small"
+
+
+class LangSmithEvalDataset(str, Enum):
     MINMOD_EXTRACTION = "MinMod Extraction Dataset"
     MINMOD_EXTRACTION_TEST = "MinMod Extraction Dataset Test"
     MINMOD_EXTRACTION_2 = "MinMod Extraction Dataset 2"
@@ -75,7 +84,7 @@ class Config:
     TEMPERATURE: float = 0
     MAX_TOKENS: int = 2048
     MINMOD_BULK_EXTRACTION_OVERWRITE: bool = True
-    EMBEDDING_FUNCTION: str = "text-embedding-3-large"
+    EMBEDDING_FUNCTION: EmbeddingFunction = EmbeddingFunction.TEXT_EMBEDDING_3_SMALL
 
     def minmod_extraction_dir(self, method: ExtractionMethod) -> str:
         """Return the directory for the MinMod extraction result of the specified method."""
@@ -86,4 +95,5 @@ class Config:
     ##############################################################
     EVAL_METHOD: ExtractionMethod = ExtractionMethod.VECTOR_RETRIEVER
     EVAL_MODEL_NAME: str = LLMModel.GPT_4_TURBO.value
-    EVAL_DATASET: str = LangSmithDataset.MINMOD_EXTRACTION_2_TEST.value
+    EVAL_DATASET: str = LangSmithEvalDataset.MINMOD_EXTRACTION_2.value
+    CONCURRENCY_LEVEL: int = 5

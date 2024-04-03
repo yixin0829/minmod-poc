@@ -196,7 +196,7 @@ class MinModEvaluator:
             dataset_name=dataset_name,
             llm_or_chain_factory=llm_or_chain_factory,
             evaluation=self.eval_config,
-            concurrency_level=1,
+            concurrency_level=Config.CONCURRENCY_LEVEL,
             project_metadata={
                 "model": Config.MODEL_NAME,
                 "eval_model": Config.EVAL_MODEL_NAME,
@@ -208,17 +208,19 @@ class MinModEvaluator:
 if __name__ == "__main__":
     evaluator = MinModEvaluator()
 
-    extractor_baseline = ExtractorBaseline(Config())
-    extractor_vector_retriever = ExtractorVectorRetriever(Config())
+    if Config.EVAL_METHOD == ExtractionMethod.BASELINE:
+        extractor = ExtractorBaseline(Config())
+    elif Config.EVAL_METHOD == ExtractionMethod.VECTOR_RETRIEVER:
+        extractor = ExtractorVectorRetriever(Config())
 
     # Option 1: Evalute llm or chain constructor
     # evaluator.evaluate_llm_or_chain(
     #     dataset_name=Config.EVAL_DATASET,
-    #     llm_or_chain_factory=extractor_baseline.get_runnable(MineralSite)
+    #     llm_or_chain_factory=extractor_baseline.extraction_chain_factory(MineralSite)
     # )
 
     # Option 2: Evaluate custom functions
     evaluator.evaluate(
         dataset_name=Config.EVAL_DATASET,
-        llm_or_chain_factory=extractor_vector_retriever.extract_eval,
+        llm_or_chain_factory=extractor.extract_eval,
     )

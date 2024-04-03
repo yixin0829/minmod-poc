@@ -48,7 +48,7 @@ class ExtractorBaseline(object):
             max_tokens=self.config.MAX_TOKENS,
         )
 
-    def get_runnable(self, output_schema: BaseModel):
+    def extraction_chain_factory(self, output_schema: BaseModel):
         # Create a parser that handles parsing exceptions form PydanticOutputParser by calling LLM to fix the output
         parser = PydanticOutputParser(pydantic_object=output_schema)
         parser_fixing = OutputFixingParser.from_llm(
@@ -77,16 +77,16 @@ class ExtractorBaseline(object):
 
         return chain
 
-    def extract(self, inputs: dict, output_schema: BaseModel):
+    def extract_eval(self, inputs: dict, output_schema: BaseModel):
         """
-        Extraction wrapper for the baseline method.
+        Extraction wrapper for evaluating the baseline method.
 
         Args:
             inputs (dict): The inputs to the extraction method. {"input": <doc>}
         """
 
         # Create baseline runnable
-        chain = self.get_runnable(output_schema)
+        chain = self.extraction_chain_factory(output_schema)
 
         # Invoke the chain and return dict
         result = chain.invoke(inputs)
@@ -314,6 +314,7 @@ class ExtractorVectorRetriever(object):
         )
 
     def retriever_factory(self, doc_name: str):
+        # TODO: Debug why the vector retriever is not working in eval (retrieve mixed chunks from other docs)
         with open(os.path.join(Config.PARSED_PDF_DIR_AZURE, doc_name), "r") as f:
             markdown_document = f.read()
 
@@ -326,7 +327,7 @@ class ExtractorVectorRetriever(object):
         markdown_splitter = MarkdownHeaderTextSplitter(headers_to_split_on)
         md_header_splits = markdown_splitter.split_text(markdown_document)
 
-        embedding_function = OpenAIEmbeddings(model=Config.EMBEDDING_FUNCTION)
+        embedding_function = OpenAIEmbeddings(model=Config.EMBEDDING_FUNCTION.value)
 
         vector_db = Chroma.from_documents(
             md_header_splits,
@@ -342,7 +343,7 @@ class ExtractorVectorRetriever(object):
         )
         return retriever_from_llm
 
-    def get_runnable(self, doc_name: str, output_schema: BaseModel):
+    def extraction_chain_factory(self, doc_name: str, output_schema: BaseModel):
         """Construct a runnable for the vector retriever extraction method."""
 
         # Create a parser that handles parsing exceptions form PydanticOutputParser by calling LLM to fix the output
@@ -376,10 +377,14 @@ class ExtractorVectorRetriever(object):
 
     def extract(self, doc_name: str, output_schema: BaseModel) -> BaseModel:
         # Create extraction chains
-        chain_basic_info = self.get_runnable(doc_name, BasicInfo)
-        chain_location_info = self.get_runnable(doc_name, LocationInfo)
-        chain_mineral_inventory = self.get_runnable(doc_name, MineralInventory)
-        chain_deposit_type = self.get_runnable(doc_name, DepositTypeCandidates)
+        chain_basic_info = self.extraction_chain_factory(doc_name, BasicInfo)
+        chain_location_info = self.extraction_chain_factory(doc_name, LocationInfo)
+        chain_mineral_inventory = self.extraction_chain_factory(
+            doc_name, MineralInventory
+        )
+        chain_deposit_type = self.extraction_chain_factory(
+            doc_name, DepositTypeCandidates
+        )
 
         # Invoke the chains for queries to extract different information
         result_basic_info = chain_basic_info.invoke(prompts.BASIC_INFO_QUERY)
