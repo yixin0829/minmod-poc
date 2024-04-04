@@ -7,6 +7,7 @@ from pydantic.v1 import BaseModel, Field
 class WeightUnits(str, Enum):
     tonnes = "tonnes"
     kg = "kilograms"
+    unknown = "unknown"
 
 
 class GradeUnits(str, Enum):
@@ -16,12 +17,11 @@ class GradeUnits(str, Enum):
     lead_eq_percent = "lead equivalence percent"
     us_dollar_per_tonne = "US dollar per tonne"
     zn_eq_percent = "zinc equivalence percent"
+    unknown = "unknown"
 
 
 class Commodity(str, Enum):
     zinc = "Zinc"
-    tungsten = "Tungsten"
-    nickel = "Nickel"
 
 
 class MineralCategory(str, Enum):
@@ -31,6 +31,8 @@ class MineralCategory(str, Enum):
     measured = "measured"
     probable = "probable"
     proven = "proven"
+    proved = "proved"
+    unknown = "unknown"
 
 
 class DepositType(str, Enum):
@@ -46,15 +48,19 @@ class BasicInfo(BaseModel):
 
 class LocationInfo(BaseModel):
     location: Optional[str] = Field(
+        default="unkonwn",
         description='latitude and longitude represented as "POINT (Lat Long)" in EPSG:4326 format.',
     )
     crs: Optional[str] = Field(
+        default="unkonwn",
         description="The coordinate reference system (CRS) used. For example, WGS84, UTM etc.",
     )
     country: Optional[str] = Field(
+        default="unkonwn",
         description="The country where the mineral site is located.",
     )
     state_or_province: Optional[str] = Field(
+        default="unkonwn",
         description="The state or province where the mineral site is located.",
     )
 
@@ -64,30 +70,37 @@ class MineralCommodity(BaseModel):
         description="The commodity of an mineral inventory item."
     )
     category: Optional[MineralCategory] = Field(
+        default="unkonwn",
         description="The category of an mineral inventory item.",
     )
     ore_unit: Optional[WeightUnits] = Field(
+        default="unkonwn",
         description="The unit in which ore quantity is measured, eg, tonnes.",
     )
     ore_value: Optional[float] = Field(
-        description="The value of ore quantity measured in ore unit."
+        default=-1, description="The value of ore quantity measured in ore unit."
     )
     grade_unit: Optional[GradeUnits] = Field(
+        default="unkonwn",
         description="The unit in which grade is measured, eg, percent.",
     )
     grade_value: Optional[float] = Field(
-        description="The value of grade measured in grade unit."
+        default=-1, description="The value of grade measured in grade unit."
     )
     cutoff_grade_unit: Optional[GradeUnits] = Field(
+        default="unkonwn",
         description="Cut-off grade unit of an inventory item.",
     )
     cutoff_grade_value: Optional[float] = Field(
+        default=-1,
         description="Cut-off grade value of an inventory item measured in cut-off grade unit.",
     )
     date: Optional[str] = Field(
+        default="unkonwn",
         description='Effective date of mineral inventory, in "dd-mm-YYYY" format. For example, "01-01-2022".',
     )
     zone: Optional[str] = Field(
+        default="unkonwn",
         description="Zone of mineral site where the mineral commodity was discovered.",
     )
 

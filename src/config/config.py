@@ -10,6 +10,8 @@ class ExtractionMethod(str, Enum):
     LLM_RETRIEVER = "llm_retriever"
     # Vector retriever: extraction using LLM + vector-retrieved relevant sections of the report + output schema
     VECTOR_RETRIEVER = "vector_retriever"
+    # Multi-query retriever + LLM
+    MULTI_QUERY_RETRIEVER = "multi_query_retriever"
 
 
 class LLMModel(str, Enum):
@@ -84,7 +86,11 @@ class Config:
     TEMPERATURE: float = 0
     MAX_TOKENS: int = 2048
     MINMOD_BULK_EXTRACTION_OVERWRITE: bool = True
+
+    # Vector retriever settings
     EMBEDDING_FUNCTION: EmbeddingFunction = EmbeddingFunction.TEXT_EMBEDDING_3_SMALL
+    CHUNK_SIZE: int = 2048
+    CHUNK_OVERLAP: int = 200
 
     def minmod_extraction_dir(self, method: ExtractionMethod) -> str:
         """Return the directory for the MinMod extraction result of the specified method."""
@@ -93,7 +99,7 @@ class Config:
     ##############################################################
     # Evaluation settings
     ##############################################################
-    EVAL_METHOD: ExtractionMethod = ExtractionMethod.VECTOR_RETRIEVER
+    EVAL_METHOD: ExtractionMethod = ExtractionMethod.MULTI_QUERY_RETRIEVER
     EVAL_MODEL_NAME: str = LLMModel.GPT_4_TURBO.value
     EVAL_DATASET: str = LangSmithEvalDataset.MINMOD_EXTRACTION_2.value
     CONCURRENCY_LEVEL: int = 5

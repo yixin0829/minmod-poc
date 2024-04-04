@@ -62,8 +62,8 @@ class LocationInfoEvaluator(RunEvaluator):
         ref = {k: ref[k] for k in sorted(ref)}
 
         # Lowercase all keys and values
-        pred = {k.lower(): v.lower() for k, v in pred.items()}
-        ref = {k.lower(): v.lower() for k, v in ref.items()}
+        pred = {k.lower(): v.lower() for k, v in pred.items() if v}
+        ref = {k.lower(): v.lower() for k, v in ref.items() if v}
 
         # Evaluate the edit distance between the predicted and reference location info
         evaluator = JsonEditDistanceEvaluator()
@@ -192,26 +192,56 @@ class MinModEvaluator:
         )
 
     def evaluate(self, dataset_name: str, llm_or_chain_factory):
+        if Config.EVAL_METHOD == ExtractionMethod.BASELINE:
+
+            project_metadata = {
+                "model": Config.MODEL_NAME,
+                "model_temperature": Config.TEMPERATURE,
+                "model_max_token": Config.MAX_TOKENS,
+                "extraction_method": Config.EVAL_METHOD.value,
+            }
+
+            concurrency_level = Config.CONCURRENCY_LEVEL
+        elif Config.EVAL_METHOD in [
+            ExtractionMethod.VECTOR_RETRIEVER,
+            ExtractionMethod.MULTI_QUERY_RETRIEVER,
+        ]:
+            project_metadata = {
+                "model": Config.MODEL_NAME,
+                "model_temperature": Config.TEMPERATURE,
+                "model_max_token": Config.MAX_TOKENS,
+                "chunk_size": Config.CHUNK_SIZE,
+                "eval_model": Config.EVAL_MODEL_NAME,
+                "extraction_method": Config.EVAL_METHOD.value,
+            }
+
+            # Chroma does not support concurrency for vector retriever
+            concurrency_level = 1
+        else:
+            raise ValueError(f"Invalid extraction method: {Config.EVAL_METHOD}")
+
         self.client.run_on_dataset(
             dataset_name=dataset_name,
             llm_or_chain_factory=llm_or_chain_factory,
             evaluation=self.eval_config,
-            concurrency_level=Config.CONCURRENCY_LEVEL,
-            project_metadata={
-                "model": Config.MODEL_NAME,
-                "eval_model": Config.EVAL_MODEL_NAME,
-                "extraction_method": Config.EVAL_METHOD.value,
-            },
+            concurrency_level=concurrency_level,
+            project_metadata=project_metadata,
         )
 
 
 if __name__ == "__main__":
     evaluator = MinModEvaluator()
+    config = Config()
 
     if Config.EVAL_METHOD == ExtractionMethod.BASELINE:
-        extractor = ExtractorBaseline(Config())
-    elif Config.EVAL_METHOD == ExtractionMethod.VECTOR_RETRIEVER:
-        extractor = ExtractorVectorRetriever(Config())
+        extractor = ExtractorBaseline(config)
+    elif Config.EVAL_METHOD in [
+        ExtractionMethod.VECTOR_RETRIEVER,
+        ExtractionMethod.MULTI_QUERY_RETRIEVER,
+    ]:
+        extractor = ExtractorVectorRetriever(config)
+    else:
+        raise ValueError(f"Invalid extraction method: {Config.EVAL_METHOD}")
 
     # Option 1: Evalute llm or chain constructor
     # evaluator.evaluate_llm_or_chain(

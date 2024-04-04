@@ -10,7 +10,10 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_text_splitters import MarkdownHeaderTextSplitter
+from langchain_text_splitters import (
+    MarkdownHeaderTextSplitter,
+    RecursiveCharacterTextSplitter,
+)
 from loguru import logger
 from pydantic.v1 import BaseModel
 from pydantic.v1.error_wrappers import ValidationError
@@ -72,25 +75,30 @@ class ExtractorBaseline(object):
         prompt = prompt.partial(format_instructions=parser.get_format_instructions())
 
         # Under the hood, this is similar to calling create_structured_output_runnable()
-        logger.info("Creating baseline structured extraction chain")
         chain = prompt | llm | parser_fixing
 
         return chain
 
-    def extract_eval(self, inputs: dict, output_schema: BaseModel):
+    def extract_eval(self, inputs: dict):
         """
         Extraction wrapper for evaluating the baseline method.
 
         Args:
             inputs (dict): The inputs to the extraction method. {"input": <doc>}
         """
+        doc_name = inputs["input"]
+        # Load the document
+        with open(
+            os.path.join(Config.PARSED_PDF_DIR_AZURE, doc_name + ".md"), "r"
+        ) as f:
+            doc = f.read()
 
         # Create baseline runnable
-        chain = self.extraction_chain_factory(output_schema)
+        chain = self.extraction_chain_factory(MineralSite)
 
         # Invoke the chain and return dict
-        result = chain.invoke(inputs)
-        return {"output": result.dict()}
+        result = chain.invoke({"input": doc})
+        return {"output": result}
 
 
 class ExtractorLLMRetriever(object):
@@ -304,6 +312,64 @@ class ExtractorLLMRetriever(object):
         )
 
 
+class VectorRetriever(object):
+    def __init__(self) -> None:
+        self.vector_db = None
+
+    def retriever_factory(self, doc_name: str):
+        with open(os.path.join(Config.PARSED_PDF_DIR_AZURE, doc_name), "r") as f:
+            doc = f.read()
+
+        headers_to_split_on = [
+            # Azure Doc AI usually don't have H1 headers
+            # ("#", "Header 1"),
+            ("##", "Header 2"),
+            ("###", "Header 3"),
+        ]
+
+        # Markdown header splits
+        markdown_splitter = MarkdownHeaderTextSplitter(
+            headers_to_split_on, strip_headers=False
+        )
+        md_header_splits = markdown_splitter.split_text(doc)
+
+        # Char-level splits
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=Config.CHUNK_SIZE, chunk_overlap=Config.CHUNK_OVERLAP
+        )
+        text_splits = text_splitter.split_documents(md_header_splits)
+
+        embedding_function = OpenAIEmbeddings(model=Config.EMBEDDING_FUNCTION.value)
+
+        # Add doc name as metadata to each split
+        for split in text_splits:
+            split.metadata["doc_name"] = doc_name
+
+        self.vector_db = Chroma.from_documents(
+            text_splits,
+            embedding_function,
+        )
+
+        # Creating a retriever from the vector database
+        if Config.EVAL_METHOD == ExtractionMethod.VECTOR_RETRIEVER:
+            retriever = self.vector_db.as_retriever(
+                search_type="similarity",
+                search_kwargs={"filter": {"doc_name": doc_name}},
+            )
+
+            return retriever
+        elif Config.EVAL_METHOD == ExtractionMethod.MULTI_QUERY_RETRIEVER:
+            retriever = self.vector_db.as_retriever(
+                search_type="similarity",
+                search_kwargs={"filter": {"doc_name": doc_name}},
+            )
+
+            retriever_from_llm = MultiQueryRetriever.from_llm(
+                retriever=retriever, llm=ChatOpenAI(temperature=0)
+            )
+            return retriever_from_llm
+
+
 class ExtractorVectorRetriever(object):
     def __init__(self, config: Config) -> None:
         self.config = config
@@ -313,37 +379,7 @@ class ExtractorVectorRetriever(object):
             max_tokens=self.config.MAX_TOKENS,
         )
 
-    def retriever_factory(self, doc_name: str):
-        # TODO: Debug why the vector retriever is not working in eval (retrieve mixed chunks from other docs)
-        with open(os.path.join(Config.PARSED_PDF_DIR_AZURE, doc_name), "r") as f:
-            markdown_document = f.read()
-
-        headers_to_split_on = [
-            # ("#", "Header 1"),  # In markdown, 2.\ is used for header 1
-            ("##", "Header 2"),
-            ("###", "Header 3"),
-        ]
-
-        markdown_splitter = MarkdownHeaderTextSplitter(headers_to_split_on)
-        md_header_splits = markdown_splitter.split_text(markdown_document)
-
-        embedding_function = OpenAIEmbeddings(model=Config.EMBEDDING_FUNCTION.value)
-
-        vector_db = Chroma.from_documents(
-            md_header_splits,
-            embedding_function,
-            # persist_directory="/home/yixin0829/minmod/minmod-poc/.chroma_db",
-        )
-
-        # Creating a retriever from the vector database
-        retriever = vector_db.as_retriever(search_type="similarity")
-
-        retriever_from_llm = MultiQueryRetriever.from_llm(
-            retriever=retriever, llm=ChatOpenAI(temperature=0)
-        )
-        return retriever_from_llm
-
-    def extraction_chain_factory(self, doc_name: str, output_schema: BaseModel):
+    def extraction_chain_factory(self, retriever, output_schema: BaseModel):
         """Construct a runnable for the vector retriever extraction method."""
 
         # Create a parser that handles parsing exceptions form PydanticOutputParser by calling LLM to fix the output
@@ -365,7 +401,6 @@ class ExtractorVectorRetriever(object):
         )
         prompt = prompt.partial(format_instructions=parser.get_format_instructions())
 
-        retriever = self.retriever_factory(doc_name)
         setup_and_retrieval = RunnableParallel(
             {"input": retriever, "query": RunnablePassthrough()}
         )
@@ -376,14 +411,18 @@ class ExtractorVectorRetriever(object):
         return chain
 
     def extract(self, doc_name: str, output_schema: BaseModel) -> BaseModel:
+        # Create a vector retriever from the document
+        vector_retriever = VectorRetriever()
+        retriever = vector_retriever.retriever_factory(doc_name)
+
         # Create extraction chains
-        chain_basic_info = self.extraction_chain_factory(doc_name, BasicInfo)
-        chain_location_info = self.extraction_chain_factory(doc_name, LocationInfo)
+        chain_basic_info = self.extraction_chain_factory(retriever, BasicInfo)
+        chain_location_info = self.extraction_chain_factory(retriever, LocationInfo)
         chain_mineral_inventory = self.extraction_chain_factory(
-            doc_name, MineralInventory
+            retriever, MineralInventory
         )
         chain_deposit_type = self.extraction_chain_factory(
-            doc_name, DepositTypeCandidates
+            retriever, DepositTypeCandidates
         )
 
         # Invoke the chains for queries to extract different information
