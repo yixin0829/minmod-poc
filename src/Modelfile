@@ -1,0 +1,6 @@
+FROM llama3
+
+PARAMETER temperature 0.5
+
+# Then run `ollama create <custom_model_name> -f ./Modelfile`
+# `ollama run <custom_model_name>`

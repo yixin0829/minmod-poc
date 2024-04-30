@@ -77,7 +77,7 @@ class Config:
     # Logging settings
     ##############################################################
     LOGGING_DIR: str = "logs"
-    LOGGING_LEVEL: any = logging.INFO
+    LOGGING_LEVEL = logging.INFO
 
     ##############################################################
     # MinMod extractor settings

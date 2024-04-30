@@ -7,3 +7,4 @@ logs/
 nb/
 /data
 .chroma_db/
+notebooks/
