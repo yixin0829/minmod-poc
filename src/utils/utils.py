@@ -1,6 +1,7 @@
 import os
 import unicodedata
 
+import numpy as np
 import pandas as pd
 import tiktoken
 from loguru import logger
@@ -76,3 +77,10 @@ def write_model_as_json(model: BaseModel, file_path: str):
         f.write(model.json(indent=4))
 
     logger.info(f"Saved at {file_path}")
+
+
+def cosine_similarity(v1, v2) -> float:
+    """
+    Compute the cosine similarity between two vectors.
+    """
+    return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))

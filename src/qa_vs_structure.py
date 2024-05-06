@@ -1,6 +1,8 @@
+import argparse
 import datetime
 import json
 import os
+import random
 import re
 import sys
 from collections import defaultdict
@@ -8,18 +10,39 @@ from dataclasses import dataclass
 from enum import Enum
 
 import ollama
+from dotenv import load_dotenv
 from loguru import logger
+from openai import OpenAI
+from pydantic import BaseModel, Field, ValidationError, create_model
 from tqdm import tqdm
+
+import config.prompts as prompts
+from config.config import Config, EmbeddingFunction
+from utils.utils import cosine_similarity
+
+load_dotenv()
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # remove the old handler. Else, the old one will work along with the new one you've added below'
 logger.remove()
+# Config loguru logger to log to console and file
+timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M")
 logger.add(sys.stdout, level="INFO")
+logger.add(
+    os.path.join(Config.LOGGING_DIR, f"qa_vs_structured_{timestamp}.log"),
+    level="DEBUG",
+    rotation="1 week",
+    retention="1 month",
+)
 
 
 class Methods(str, Enum):
-    ONE_SHOT_QA = "one_shot_qa"
-    ONE_SHOT_STRUCTURED = "one_shot_structured"
-    ONE_SHOT_STRUCTURED_W_RETRY = "one_shot_structured_w_retry"
+    SINGLE_QA = "1shot_qa"
+    SINGLE_STRUCTURED = "2shot_structured"
+    SINGLE_STRUCTURED_W_RETRY = "2shot_structured_w_retry"
+    MULTI_FIELD_QA = "1shot_multi_field_qa"
+    MULTI_FIELD_STRUCTURED = "1shot_multi_field_structured"
 
 
 @dataclass
@@ -30,55 +53,130 @@ class SquadQuestion:
     context: str
 
 
-# Prompts
-SYSTEM_PROMPT_QA = """You are a QA bot. Given the context and question, output the final answer only. Here's one example:
-
-```
-Context: The Normans (Norman: Nourmands; French: Normands; Latin: Normanni) were the people who in the 10th and 11th centuries gave their name to Normandy, a region in France. They were descended from Norse (\"Norman\" comes from \"Norseman\") raiders and pirates from Denmark, Iceland and Norway who, under their leader Rollo, agreed to swear fealty to King Charles III of West Francia. Through generations of assimilation and mixing with the native Frankish and Roman-Gaulish populations, their descendants would gradually merge with the Carolingian-based cultures of West Francia. The distinct cultural and ethnic identity of the Normans emerged initially in the first half of the 10th century, and it continued to evolve over the succeeding centuries.
-
-Question: Who was the Norse leader?
-
-Answer: Rollo
-```
-
-Note: If the answer is not mentioned in the given context, please answer with an empty string ""."""
-USER_PROMPT_QA = """Context: {context}\n\nQuestion: {question}\n\nAnswer: """
-
-SYSTEM_PROMPT_STRUCTURED = """You extract structured data from the given context. Given the context and question, output the final answer only. The final answer should be formatted as a JSON instance that conforms to the JSON schema provided. Here's one example:
-
-```
-Context: The Normans (Norman: Nourmands; French: Normands; Latin: Normanni) were the people who in the 10th and 11th centuries gave their name to Normandy, a region in France. They were descended from Norse (\"Norman\" comes from \"Norseman\") raiders and pirates from Denmark, Iceland and Norway who, under their leader Rollo, agreed to swear fealty to King Charles III of West Francia. Through generations of assimilation and mixing with the native Frankish and Roman-Gaulish populations, their descendants would gradually merge with the Carolingian-based cultures of West Francia. The distinct cultural and ethnic identity of the Normans emerged initially in the first half of the 10th century, and it continued to evolve over the succeeding centuries.
-
-JSON Schema: {"properties": {"answer": {"default": "", "description": "Who was the Norse leader?", "title": "Answer", "type": "string"}, "required": ["answer"], "title": "Answer", "type": "object"}
-
-Answer: {"answer": "Rollo"}
-```
-
-Note: If the answer is not mentioned in the given context, please answer with an empty string ""."""
-USER_PROMPT_STRUCTURED = """Context: {context}\n\nJSON Schema: {{"properties": {{"answer": {{"default:": "", "description": "{question}", "title": "Answer", "type": "string"}}, "required": ["answer"], "title": "Answer", "type": "object"}}\n\nAnswer: """
-
-
-# SQuAD dataset paths
-SQUAD_DEV_PATH = "data/asset/eval/squad_v2/dev-v2.0.json"
-SQUAD_DEV_TEST_PATH = "data/asset/eval/squad_v2/dev-v2.0_test.json"
-OUTPUT_PRED_PATH = "data/asset/eval/squad_v2"
-
-# Note: choose your method here (only need to change this line)
-SELECTED_METHOD = Methods.ONE_SHOT_STRUCTURED_W_RETRY
-
-OUTPUT_JSON_NAME = "{}_pred_llama3_8b_{}.json".format(
-    datetime.datetime.now().strftime("%Y%m%d%H%M"), SELECTED_METHOD.value
-)
-RETRY = True if SELECTED_METHOD == Methods.ONE_SHOT_STRUCTURED_W_RETRY else False
-
-
 class SquadQA(object):
-    def __init__(self) -> None:
-        self.model = "llama3-custom"
+    def __init__(self, model: str, fixed_samples: bool) -> None:
+        self.model = model
+        self.fixed_samples = fixed_samples
+
+    @staticmethod
+    def enrich_squad(file_path: str) -> None:
+        """
+        Enrich the SQuAD dataset by rewriting question into a description field
+        """
+
+        logger.info("Enriching SQuAD dataset with descriptions")
+
+        # load the SQuAD dataset
+        with open(file_path, "r") as f:
+            squad_data = json.load(f)
+
+        squad_data_tqdm = tqdm(squad_data["data"], desc="Enriching SQuAD data")
+        for data in squad_data_tqdm:
+            for paragraph in data["paragraphs"]:
+                for qa in paragraph["qas"]:
+                    question = qa["question"]
+                    try:
+                        response = ollama.chat(
+                            model="llama3",
+                            messages=[
+                                {
+                                    "role": "system",
+                                    "content": prompts.FEW_SHOT_ENRICH_SYS_PROMPT,
+                                },
+                                {
+                                    "role": "user",
+                                    "content": prompts.FEW_SHOT_ENRICH_USER_PROMPT.format(
+                                        question=question.strip()
+                                    ),
+                                },
+                            ],
+                        )
+                        description = response["message"]["content"]
+                        # remove "Description: " from the response to safe guard against any errors
+                        description = description.replace("Description: ", "")
+                        description = description.replace("Input: ", "")
+                        # capitalize the first letter of the description
+                        description = description.capitalize().strip()
+                        # compute the cosine similarity between the question and generated description
+                        embed_q = client.embeddings.create(
+                            input=question,
+                            model=EmbeddingFunction.TEXT_EMBEDDING_3_SMALL.value,
+                        )
+                        embed_d = client.embeddings.create(
+                            input=description,
+                            model=EmbeddingFunction.TEXT_EMBEDDING_3_SMALL.value,
+                        )
+                        similarity = cosine_similarity(
+                            embed_q.data[0].embedding, embed_d.data[0].embedding
+                        )
+
+                        MAX_RETRY = 10
+                        retry_count = 0
+                        # Note: Evaluating quality based on cosine similarity is not the best approach. Sometimes opposite words can have high similarity.
+                        while similarity < 0.75 and retry_count < MAX_RETRY:
+                            # regenerate the description if the similarity is less than 0.95
+                            response = ollama.chat(
+                                model="llama3-custom",
+                                messages=[
+                                    {
+                                        "role": "system",
+                                        "content": prompts.FEW_SHOT_ENRICH_SYS_PROMPT,
+                                    },
+                                    {
+                                        "role": "user",
+                                        "content": prompts.FEW_SHOT_ENRICH_USER_PROMPT.format(
+                                            question=question.strip()
+                                        ),
+                                    },
+                                ],
+                            )
+                            description_temp = response["message"]["content"]
+                            description_temp = description_temp.replace(
+                                "Description: ", ""
+                            )
+                            description_temp = description_temp.replace("Input: ", "")
+                            description_temp = description_temp.capitalize().strip()
+                            # compute the cosine similarity between the question and generated description
+                            embed_d_temp = client.embeddings.create(
+                                input=description_temp,
+                                model=EmbeddingFunction.TEXT_EMBEDDING_3_SMALL.value,
+                            )
+                            similarity_temp = cosine_similarity(
+                                embed_q.data[0].embedding,
+                                embed_d_temp.data[0].embedding,
+                            )
+
+                            # take the new description if the similarity is higher
+                            if similarity_temp > similarity:
+                                description = description_temp
+                                similarity = similarity_temp
+                                logger.info(
+                                    f"higher similarity found: {similarity_temp}"
+                                )
+
+                            retry_count += 1
+
+                        logger.info(f"{question=}, {description=}")
+                        qa["description"] = description
+                    except ollama.ResponseError as e:
+                        qa["description"] = ""
+                        logger.error(e)
+
+            squad_data_tqdm.refresh()
+
+        # write the enriched SQuAD dataset to a new file
+        enriched_file_path = file_path.replace(".json", "_enriched.json")
+        logger.info(f"Writing enriched SQuAD data to {enriched_file_path}")
+        with open(enriched_file_path, "w") as f:
+            json.dump(squad_data, f)
+
+        logger.info("Enrichment completed")
 
     @staticmethod
     def split_squad(file_path: str, split_ratio: float = 0.8) -> None:
-        """Split the SQuAD dataset into train and test sets based on the split ratio"""
+        """
+        Split the SQuAD dataset into train and test sets based on the split ratio
+        """
 
         logger.info("Splitting SQuAD dataset into train and test sets")
 
@@ -104,17 +202,15 @@ class SquadQA(object):
 
     @staticmethod
     def parse_squad(file_path: str) -> list[SquadQuestion]:
-        """Parse the SQuAD dataset into a list of tuples containing (question, question_id, title, context, gt_answer)"""
-        # create a named tuple to store the parsed data
-
+        """
+        Parse the SQuAD dataset into a list of tuples containing (question, question_id, title, context, gt_answer)
+        """
         logger.info("Parsing SQuAD dataset")
 
         with open(file_path, "r") as f:
             squad_data = json.load(f)
 
         parsed_data = []
-        # Note: comment this line to test the code on one document
-        # squad_data_tqdm = tqdm(squad_data["data"][:1], desc="Parsing SQuAD data")
         squad_data_tqdm = tqdm(squad_data["data"], desc="Parsing SQuAD data")
         for data in squad_data_tqdm:
             title = data["title"]
@@ -131,22 +227,33 @@ class SquadQA(object):
 
         return parsed_data
 
-    def predict(self, question: str, context: str, method: Methods) -> str | None:
+    def predict(self, question: str, context: str, method: Methods) -> str:
         """Predict the answer for a given question and context"""
 
-        if method == Methods.ONE_SHOT_QA:
-            sys_prompt = SYSTEM_PROMPT_QA
-            user_prompt = USER_PROMPT_QA.format(context=context, question=question)
-        elif method in [
-            Methods.ONE_SHOT_STRUCTURED,
-            Methods.ONE_SHOT_STRUCTURED_W_RETRY,
-        ]:
-            sys_prompt = SYSTEM_PROMPT_STRUCTURED
-            user_prompt = USER_PROMPT_STRUCTURED.format(
-                context=context, question=question
+        answer = ""
+
+        # construct prompts
+        if method == Methods.SINGLE_QA:
+            sys_prompt = prompts.SINGLE_QA_SYS_PROMPT
+            user_prompt = prompts.SINGLE_QA_USER_PROMPT.format(
+                context=context, question=question.strip()
             )
-        else:
-            raise ValueError(f"Method {method} is not supported")
+        elif method in [
+            Methods.SINGLE_STRUCTURED,
+            Methods.SINGLE_STRUCTURED_W_RETRY,
+        ]:
+            sys_prompt = prompts.SINGLE_STRUCTURED_SYS_PROMPT
+
+            # construct a pydantic model in run time for generating the JSON schema
+            Answer = create_model(
+                "Answer",
+                answer=(str, Field(default="N/A", description=question.strip())),
+            )
+            json_schema = json.dumps(Answer.model_json_schema())
+
+            user_prompt = prompts.SINGLE_STRUCTURED_USER_PROMPT.format(
+                context=context, json_schema=json_schema
+            )
 
         try:
             response = ollama.chat(
@@ -158,19 +265,176 @@ class SquadQA(object):
             )
         except ollama.ResponseError as e:
             logger.error(e)
-            return None
 
         answer = response["message"]["content"]
         logger.debug(f"{sys_prompt=}")
         logger.debug(f"{user_prompt=}")
-        logger.debug(f"{answer=}")
+        logger.info(f"{answer=}")
 
         return answer
 
+    @staticmethod
+    def sample_questions(
+        squad_data: dict, num_questions: int, fixed_samples: bool
+    ) -> list[dict]:
+        """
+        Sample questions from the SQuAD dataset for building few-shot prompts
+        Args:
+            squad_data: a SQuAD dataset
+            num_questions: number of questions to sample
+            fixed_samples: whether to sample fixed questions (only include head and tail two shot) or randomly sample
+        """
+        # sample same number of questions to use in few-shot examples
+        # (must include one question with answer and one without answer)
+        questions = squad_data["data"][0]["paragraphs"][0]["qas"][1:-1]
+
+        if fixed_samples:
+            sample_qs = []
+        else:
+            sample_qs = random.sample(questions, num_questions - 2)
+
+        # add one question with answer and one without answer
+        sample_qs.append(questions[0])
+        sample_qs.append(questions[-1])
+
+        return sample_qs
+
+    def predict_multi_fields(
+        self, questions: list[str], context: str, method: Methods
+    ) -> list[str]:
+        """
+        Predict the answers for a list of questions and a single context
+        """
+        answers = []
+        num_questions = len(questions)
+
+        if num_questions == 1 and method == Methods.MULTI_FIELD_QA:
+            answers.append(self.predict(questions[0], context, Methods.SINGLE_QA))
+            return answers
+        elif num_questions == 1 and method == Methods.MULTI_FIELD_STRUCTURED:
+            answers.append(
+                self.predict(questions[0], context, Methods.SINGLE_STRUCTURED)
+            )
+            return answers
+
+        if method == Methods.MULTI_FIELD_QA:
+            # construct the system prompt
+            sys_prompt = prompts.MULTI_FIELD_QA_SYS_PROMPT
+            with open(SQUAD_DEV_TRAIN_PATH, "r") as f:
+                squad_data = json.load(f)
+                sample_qs = self.sample_questions(
+                    squad_data, num_questions, self.fixed_samples
+                )
+
+                sample_qs_concat = ""
+                sample_ans_concat = ""
+                for i in range(len(sample_qs)):
+                    q = sample_qs[i]["question"]
+                    if sample_qs[i]["answers"]:
+                        ans = sample_qs[i]["answers"][0]["text"]
+                    else:
+                        ans = "N/A"
+                    sample_qs_concat += f"Question{i+1}: {q}\n"
+                    sample_ans_concat += f"Answer{i+1}: {ans}\n"
+
+                sys_prompt = prompts.MULTI_FIELD_QA_SYS_PROMPT.format(
+                    questions=sample_qs_concat, answers=sample_ans_concat
+                )
+
+            # construct the user prompt
+            questions_concat = ""
+            for i in range(len(questions)):
+                questions_concat += f"Question{i+1}: {questions[i]}\n"
+
+            user_prompt = prompts.MULTI_FIELD_QA_USER_PROMPT.format(
+                context=context, questions=questions_concat
+            )
+        elif method == Methods.MULTI_FIELD_STRUCTURED:
+            # construct the system prompt
+            sys_prompt = prompts.MULTI_FIELD_STRUCTURED_SYS_PROMPT
+            with open(SQUAD_DEV_TRAIN_PATH, "r") as f:
+                squad_data = json.load(f)
+                sample_qs = self.sample_questions(
+                    squad_data, num_questions, self.fixed_samples
+                )
+
+                schema_fields = {}
+                ans_fields = {}
+                for i in range(len(sample_qs)):
+                    q = sample_qs[i]["question"]
+                    schema_fields[f"answer{i+1}"] = (
+                        str,
+                        Field(default="N/A", description=q),
+                    )
+                    if sample_qs[i]["answers"]:
+                        ans_fields[f"answer{i+1}"] = sample_qs[i]["answers"][0]["text"]
+                    else:
+                        ans_fields[f"answer{i+1}"] = "N/A"
+                Answer = create_model("Answer", **schema_fields)
+                sys_prompt = prompts.MULTI_FIELD_STRUCTURED_SYS_PROMPT.format(
+                    json_schema=json.dumps(Answer.model_json_schema()),
+                    answers=json.dumps(ans_fields),
+                )
+
+            # construct the user prompt
+            schema_fields_user = {}
+            for i in range(len(questions)):
+                schema_fields_user[f"answer{i+1}"] = (
+                    str,
+                    Field(default="N/A", description=questions[i]),
+                )
+            Answer_user = create_model("Answer", **schema_fields_user)
+            user_prompt = prompts.MULTI_FIELD_STRUCTURED_USER_PROMPT.format(
+                context=context, json_schema=json.dumps(Answer_user.model_json_schema())
+            )
+
+        try:
+            response = ollama.chat(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+        except ollama.ResponseError as e:
+            logger.error(e)
+
+        # parse the answer string to get the answers
+        answer = response["message"]["content"]
+        # print(sys_prompt)
+        # print(user_prompt)
+        logger.debug(f"{sys_prompt=}")
+        logger.debug(f"{user_prompt=}")
+        logger.debug(f"{answer=}")
+
+        if method == Methods.MULTI_FIELD_QA:
+            for i in range(len(questions)):
+                match = re.search(f"Answer{i+1}: (.*)", answer)
+                answers.append(
+                    match.group(1).replace(f"Answer{i+1}: ", "") if match else ""
+                )
+        elif method == Methods.MULTI_FIELD_STRUCTURED:
+            try:
+                match = re.match(r"\{.*\}", answer, re.DOTALL)
+                answer = match.group(0) if match else answer
+                answer = json.loads(answer)
+                for i in range(len(questions)):
+                    answers.append(answer[f"answer{i+1}"])
+            except json.JSONDecodeError:
+                logger.error(f"JSON decode error. {answer=}")
+            except KeyError:
+                logger.error(f"Key error. {answer=}")
+
+        logger.info(f"{answers=}")
+
+        return answers
+
     def bulk_predict(
         self, parsed_data: list[SquadQuestion], method: Methods, retry: bool
-    ) -> dict:
-        """Predict the answers for a list of questions and contexts."""
+    ) -> dict[str, str]:
+        """
+        Predict the answers for a list of questions and contexts.
+        """
 
         logger.info(
             "Bulk predicting answers for SQuAD dataset use method: {}".format(method)
@@ -187,25 +451,20 @@ class SquadQA(object):
             answer = self.predict(question, context, method)
 
             # parse and append to answers list based on the method
-            if answer and method == Methods.ONE_SHOT_QA:
-                answers[question_id] = answer
+            if answer and method == Methods.SINGLE_QA:
+                answers[question_id] = "" if "N/A" in answer else answer
                 summary["success"] += 1
             elif answer and method in [
-                Methods.ONE_SHOT_STRUCTURED,
-                Methods.ONE_SHOT_STRUCTURED_W_RETRY,
+                Methods.SINGLE_STRUCTURED,
+                Methods.SINGLE_STRUCTURED_W_RETRY,
             ]:
-                # empty string is a valid answer for structured prediction
-                if not answer:
-                    answers[question_id] = ""
+                # regex match only the JSON string. re.DOTALL is used to match newline characters
+                match = re.match(r"\{.*\}", answer, re.DOTALL)
+                answer = match.group(0) if match else answer
 
-                # regex match only the JSON string
-                answer_regex = re.match(r"\{.*\}", answer)
-                answer = answer_regex.group(0) if answer_regex else answer
-
-                # validate if the answer is a valid JSON string and parse the answer
                 try:
-                    answer = json.loads(answer)
-                    answers[question_id] = answer["answer"]
+                    answer = json.loads(answer)["answer"]
+                    answers[question_id] = "" if "N/A" in answer else answer
                     summary["success"] += 1
                 except json.JSONDecodeError:
                     logger.error(
@@ -229,7 +488,8 @@ class SquadQA(object):
             # retry the prediction if the answer is None for up to N times
             if retry and answers[question_id] is None:
                 retry_count = 0
-                while retry_count < 10:
+                MAX_RETRY = 10
+                while retry_count < MAX_RETRY:
                     logger.warning(
                         "Retrying prediction for question_id: {}".format(question_id)
                     )
@@ -256,13 +516,111 @@ class SquadQA(object):
         logger.info(f"Summary: {summary}")
         return answers
 
+    def bulk_predict_multi_fields(
+        self,
+        parsed_data: list[SquadQuestion],
+        method: Methods,
+        retry: bool,
+        group_size: int,
+    ) -> dict[str, str]:
+        """Predict the answers for a list of questions and contexts."""
+
+        logger.info(
+            "Bulk predicting answers for SQuAD dataset use method: {}".format(method)
+        )
+
+        grouped_qs = defaultdict(list)
+        # group questions by context
+        for data in parsed_data:
+            if data.context in grouped_qs:
+                grouped_qs[data.context].append(data)
+            else:
+                grouped_qs[data.context] = [data]
+
+        # init trackers for answers, summary, and retry distribution
+        answers, summary, retry_distribution = {}, defaultdict(int), defaultdict(int)
+
+        # loop through d and group questions by group_size. if the questions are from different context then split them into different groups
+        grouped_qs = tqdm(grouped_qs.items(), desc="Bulk predicting answers")
+        for context, group in grouped_qs:
+            num_questions = len(group)
+            num_groups = num_questions // group_size
+            if num_questions % group_size != 0:
+                num_groups += 1
+
+            for i in range(num_groups):
+                start = i * group_size
+                end = start + group_size
+
+                # if end is greater than the number of questions, set end to the number of questions
+                if end > num_questions:
+                    end = num_questions
+
+                questions = [data.question for data in group[start:end]]
+                question_ids = [data.question_id for data in group[start:end]]
+
+                answers_group = self.predict_multi_fields(questions, context, method)
+
+                for id, ans in zip(question_ids, answers_group):
+                    answers[id] = "" if "N/A" in ans else ans
+
+        # bulk prediction summary and relative percentage
+        logger.info(f"Summary: {summary}")
+        return answers
+
 
 if __name__ == "__main__":
     """Run the SquadQA class to predict answers for the SQuAD dataset. Finally write predictions to a JSON file."""
-    squad_qa = SquadQA()
+
+    # add argument parser
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", type=str, help="Model to use for prediction")
+    parser.add_argument("--method", type=Methods, help="Method to use for prediction")
+    parser.add_argument(
+        "--fixed_samples",
+        type=int,
+        help="Whether to sample fixed questions for few-shot prompts",
+    )
+    parser.add_argument("--group_size", type=int, help="Group size for multi-field QA")
+    args = parser.parse_args()
+
+    MODEL = args.model
+    FIXED_SAMPLES = bool(args.fixed_samples) if args.fixed_samples else False
+    SELECTED_METHOD = args.method
+    GROUP_SIZE = args.group_size
+
+    # SQuAD dataset paths
+    SQUAD_DEV_PATH = "data/asset/eval/squad_v2/dev-v2.0.json"
+    SQUAD_DEV_TEST_PATH = "data/asset/eval/squad_v2/dev-v2.0_test.json"
+    SQUAD_DEV_TRAIN_PATH = "data/asset/eval/squad_v2/dev-v2.0_train.json"
+    OUTPUT_PRED_PATH = "data/asset/eval/squad_v2"
+
+    OUTPUT_JSON_NAME = "{}_pred_llama3_8b_{}_gs{}.json".format(
+        datetime.datetime.now().strftime("%Y%m%d%H%M"),
+        SELECTED_METHOD.value,
+        GROUP_SIZE,
+    )
+    RETRY = True if SELECTED_METHOD == Methods.SINGLE_STRUCTURED_W_RETRY else False
+
+    squad_qa = SquadQA(MODEL, FIXED_SAMPLES)
 
     parsed_data = squad_qa.parse_squad(SQUAD_DEV_TEST_PATH)
-    answers = squad_qa.bulk_predict(parsed_data, method=SELECTED_METHOD, retry=RETRY)
+
+    if SELECTED_METHOD in [
+        Methods.SINGLE_QA,
+        Methods.SINGLE_STRUCTURED,
+        Methods.SINGLE_STRUCTURED_W_RETRY,
+    ]:
+        answers = squad_qa.bulk_predict(
+            parsed_data, method=SELECTED_METHOD, retry=RETRY
+        )
+    elif SELECTED_METHOD in [
+        Methods.MULTI_FIELD_QA,
+        Methods.MULTI_FIELD_STRUCTURED,
+    ]:
+        answers = squad_qa.bulk_predict_multi_fields(
+            parsed_data, method=SELECTED_METHOD, retry=RETRY, group_size=GROUP_SIZE
+        )
 
     logger.info("Writing predictions to JSON file at {}".format(OUTPUT_PRED_PATH))
     with open(os.path.join(OUTPUT_PRED_PATH, OUTPUT_JSON_NAME), "w") as f:
