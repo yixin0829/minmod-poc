@@ -26,12 +26,13 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # remove the old handler. Else, the old one will work along with the new one you've added below'
 logger.remove()
-# Config loguru logger to log to console and file
+# Note: Config loguru logger to log to console and file
+LOG_LEVEL = "INFO"
 timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M")
-logger.add(sys.stdout, level="INFO")
+logger.add(sys.stdout, level=LOG_LEVEL)
 logger.add(
     os.path.join(Config.LOGGING_DIR, f"qa_vs_structured_{timestamp}.log"),
-    level="DEBUG",
+    level=LOG_LEVEL,
     rotation="1 week",
     retention="1 month",
 )
@@ -284,6 +285,9 @@ class SquadQA(object):
             num_questions: number of questions to sample
             fixed_samples: whether to sample fixed questions (only include head and tail two shot) or randomly sample
         """
+        # Note: initial experiments show that sampling same number of questions for few-shot prompting does not improve the performance
+        # Using one-shot example with 2 questions (one w answer + one w/o answer) yields the same result
+
         # sample same number of questions to use in few-shot examples
         # (must include one question with answer and one without answer)
         questions = squad_data["data"][0]["paragraphs"][0]["qas"][1:-1]
@@ -401,8 +405,8 @@ class SquadQA(object):
 
         # parse the answer string to get the answers
         answer = response["message"]["content"]
-        # print(sys_prompt)
-        # print(user_prompt)
+        print(sys_prompt)
+        print(user_prompt)
         logger.debug(f"{sys_prompt=}")
         logger.debug(f"{user_prompt=}")
         logger.debug(f"{answer=}")

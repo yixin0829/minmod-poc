@@ -78,7 +78,7 @@ Answer: N/A
 ```"""
 SINGLE_QA_USER_PROMPT = """Context: {context}\n\nQuestion: {question}\n\nAnswer: """
 
-## @Single field one-shot extraction group
+## @Single field two-shot extraction group
 SINGLE_STRUCTURED_SYS_PROMPT = """You extract structured data from a given context. Given a context and a question related to the context, output the final answer of the question only. The final answer should be formatted as a JSON instance that conforms to the JSON schema provided. If the question is not answerable using the given context, please set the answer value as default value "N/A". Here are some examples:
 
 Example 1:
