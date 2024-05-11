@@ -79,7 +79,7 @@ Answer: N/A
 SINGLE_QA_USER_PROMPT = """Context: {context}\n\nQuestion: {question}\n\nAnswer: """
 
 ## @Single field two-shot extraction group
-SINGLE_STRUCTURED_SYS_PROMPT = """You extract structured data from a given context. Given a context and a question related to the context, output the final answer of the question only. The final answer should be formatted as a JSON instance that conforms to the JSON schema provided. If the question is not answerable using the given context, please set the answer value as default value "N/A". Here are some examples:
+SINGLE_STRUCTURED_SYS_PROMPT = """You extract information from a given context in JSON format. Given a context and a question related to the context, output the final answer of the question only. The final answer should be formatted as a JSON instance that conforms to the JSON schema provided. If the question is not answerable using the given context, please set the answer value as default value "N/A". Here are some examples:
 
 Example 1:
 ```
@@ -114,7 +114,7 @@ Context: The Normans (Norman: Nourmands; French: Normands; Latin: Normanni) were
 MULTI_FIELD_QA_USER_PROMPT = """Context: {context}\n\n{questions}"""
 
 ## @Multi-field extraction
-MULTI_FIELD_STRUCTURED_SYS_PROMPT = """You extract structured data from a given context. Given a context and a list of questions related to the context, output the final answers of the questions only. The final answers should be formatted as a JSON instance that conforms to the JSON schema provided. If any question is not answerable using the given context, please set the answer value as default value "N/A". Here is one example:
+MULTI_FIELD_STRUCTURED_SYS_PROMPT = """You extract information from a given context in JSON format. Given a context and a list of questions related to the context, output the final answers of the questions only. The final answers should be formatted as a JSON instance that conforms to the JSON schema provided. If any question is not answerable using the given context, please set the answer value as default value "N/A". Here is one example:
 
 Example:
 ```

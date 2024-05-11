@@ -1,6 +1,7 @@
 
 #!/bin/bash
 
+echo $SHELL
 echo "Running shell script to run qa_vs_structured.py with single QA and structured group"
 
 # define array of method and group size

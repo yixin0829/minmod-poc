@@ -2,7 +2,6 @@ import argparse
 import datetime
 import json
 import os
-import random
 import re
 import sys
 from collections import defaultdict
@@ -10,6 +9,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 import ollama
+import pandas as pd
 from dotenv import load_dotenv
 from loguru import logger
 from openai import OpenAI
@@ -30,12 +30,6 @@ logger.remove()
 LOG_LEVEL = "INFO"
 timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M")
 logger.add(sys.stdout, level=LOG_LEVEL)
-logger.add(
-    os.path.join(Config.LOGGING_DIR, f"qa_vs_structured_{timestamp}.log"),
-    level=LOG_LEVEL,
-    rotation="1 week",
-    retention="1 month",
-)
 
 
 class Methods(str, Enum):
@@ -275,7 +269,7 @@ class SquadQA(object):
         return answer
 
     @staticmethod
-    def sample_questions(
+    def stratified_sample_qs(
         squad_data: dict, num_questions: int, fixed_samples: bool
     ) -> list[dict]:
         """
@@ -283,52 +277,53 @@ class SquadQA(object):
         Args:
             squad_data: a SQuAD dataset
             num_questions: number of questions to sample
-            fixed_samples: whether to sample fixed questions (only include head and tail two shot) or randomly sample
+            fixed_samples: whether to sample fixed questions for few-shot prompts
+        Returns:
+            sample_qs: a list of sampled question objects from SQaUD dataset
         """
         # Note: initial experiments show that sampling same number of questions for few-shot prompting does not improve the performance
         # Using one-shot example with 2 questions (one w answer + one w/o answer) yields the same result
 
-        # sample same number of questions to use in few-shot examples
-        # (must include one question with answer and one without answer)
-        questions = squad_data["data"][0]["paragraphs"][0]["qas"][1:-1]
-
-        if fixed_samples:
-            sample_qs = []
+        # stratified sample same number of answerable/unanswerable questions to use in few-shot examples
+        questions = squad_data["data"][0]["paragraphs"][0]["qas"]
+        df = pd.DataFrame(questions)
+        if not fixed_samples:
+            df = df.groupby("is_impossible", group_keys=False)[
+                ["question", "id", "answers"]
+            ].apply(lambda x: x.sample(num_questions // 2, replace=True))
         else:
-            sample_qs = random.sample(questions, num_questions - 2)
+            df = df.groupby("is_impossible", group_keys=False)[
+                ["question", "id", "answers"]
+            ].apply(lambda x: x.sample(1))
 
-        # add one question with answer and one without answer
-        sample_qs.append(questions[0])
-        sample_qs.append(questions[-1])
+        # shuffle the dataframe to avoid bias in ordering in the few-shot prompt
+        df = df.sample(frac=1).reset_index(drop=True)
+
+        sample_qs = df.to_dict(orient="records")
 
         return sample_qs
 
     def predict_multi_fields(
         self, questions: list[str], context: str, method: Methods
-    ) -> list[str]:
+    ) -> str:
         """
         Predict the answers for a list of questions and a single context
         """
-        answers = []
         num_questions = len(questions)
-
-        if num_questions == 1 and method == Methods.MULTI_FIELD_QA:
-            answers.append(self.predict(questions[0], context, Methods.SINGLE_QA))
-            return answers
-        elif num_questions == 1 and method == Methods.MULTI_FIELD_STRUCTURED:
-            answers.append(
-                self.predict(questions[0], context, Methods.SINGLE_STRUCTURED)
-            )
-            return answers
 
         if method == Methods.MULTI_FIELD_QA:
             # construct the system prompt
             sys_prompt = prompts.MULTI_FIELD_QA_SYS_PROMPT
             with open(SQUAD_DEV_TRAIN_PATH, "r") as f:
                 squad_data = json.load(f)
-                sample_qs = self.sample_questions(
-                    squad_data, num_questions, self.fixed_samples
-                )
+                if num_questions == 1:
+                    sample_qs = self.stratified_sample_qs(
+                        squad_data, 2, self.fixed_samples
+                    )
+                else:
+                    sample_qs = self.stratified_sample_qs(
+                        squad_data, num_questions, self.fixed_samples
+                    )
 
                 sample_qs_concat = ""
                 sample_ans_concat = ""
@@ -347,8 +342,8 @@ class SquadQA(object):
 
             # construct the user prompt
             questions_concat = ""
-            for i in range(len(questions)):
-                questions_concat += f"Question{i+1}: {questions[i]}\n"
+            for i, q in enumerate(questions):
+                questions_concat += f"Question{i+1}: {q}\n"
 
             user_prompt = prompts.MULTI_FIELD_QA_USER_PROMPT.format(
                 context=context, questions=questions_concat
@@ -358,19 +353,24 @@ class SquadQA(object):
             sys_prompt = prompts.MULTI_FIELD_STRUCTURED_SYS_PROMPT
             with open(SQUAD_DEV_TRAIN_PATH, "r") as f:
                 squad_data = json.load(f)
-                sample_qs = self.sample_questions(
-                    squad_data, num_questions, self.fixed_samples
-                )
+                if num_questions == 1:
+                    sample_qs = self.stratified_sample_qs(
+                        squad_data, 2, self.fixed_samples
+                    )
+                else:
+                    sample_qs = self.stratified_sample_qs(
+                        squad_data, num_questions, self.fixed_samples
+                    )
 
                 schema_fields = {}
                 ans_fields = {}
-                for i in range(len(sample_qs)):
-                    q = sample_qs[i]["question"]
+                for i, qas in enumerate(sample_qs):
+                    q = qas["question"]
                     schema_fields[f"answer{i+1}"] = (
                         str,
                         Field(default="N/A", description=q),
                     )
-                    if sample_qs[i]["answers"]:
+                    if qas["answers"]:
                         ans_fields[f"answer{i+1}"] = sample_qs[i]["answers"][0]["text"]
                     else:
                         ans_fields[f"answer{i+1}"] = "N/A"
@@ -382,10 +382,10 @@ class SquadQA(object):
 
             # construct the user prompt
             schema_fields_user = {}
-            for i in range(len(questions)):
+            for i, q in enumerate(questions):
                 schema_fields_user[f"answer{i+1}"] = (
                     str,
-                    Field(default="N/A", description=questions[i]),
+                    Field(default="N/A", description=q),
                 )
             Answer_user = create_model("Answer", **schema_fields_user)
             user_prompt = prompts.MULTI_FIELD_STRUCTURED_USER_PROMPT.format(
@@ -405,37 +405,18 @@ class SquadQA(object):
 
         # parse the answer string to get the answers
         answer = response["message"]["content"]
-        print(sys_prompt)
-        print(user_prompt)
-        logger.debug(f"{sys_prompt=}")
-        logger.debug(f"{user_prompt=}")
+        if LOG_LEVEL == "DEBUG":
+            print(sys_prompt)
+            print(user_prompt)
+        # logger.debug(f"{sys_prompt=}")
+        # logger.debug(f"{user_prompt=}")
         logger.debug(f"{answer=}")
 
-        if method == Methods.MULTI_FIELD_QA:
-            for i in range(len(questions)):
-                match = re.search(f"Answer{i+1}: (.*)", answer)
-                answers.append(
-                    match.group(1).replace(f"Answer{i+1}: ", "") if match else ""
-                )
-        elif method == Methods.MULTI_FIELD_STRUCTURED:
-            try:
-                match = re.match(r"\{.*\}", answer, re.DOTALL)
-                answer = match.group(0) if match else answer
-                answer = json.loads(answer)
-                for i in range(len(questions)):
-                    answers.append(answer[f"answer{i+1}"])
-            except json.JSONDecodeError:
-                logger.error(f"JSON decode error. {answer=}")
-            except KeyError:
-                logger.error(f"Key error. {answer=}")
-
-        logger.info(f"{answers=}")
-
-        return answers
+        return answer
 
     def bulk_predict(
         self, parsed_data: list[SquadQuestion], method: Methods, retry: bool
-    ) -> dict[str, str]:
+    ):
         """
         Predict the answers for a list of questions and contexts.
         """
@@ -510,15 +491,15 @@ class SquadQA(object):
                         )
                         summary["retry_success"] += 1
                         break
-                    except Exception as e:
-                        logger.error(f"{answer=}. {e}")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"{e}\n{answer=}")
                         retry_count += 1
 
             parsed_data_tqdm.refresh()
 
         # bulk prediction summary and relative percentage
         logger.info(f"Summary: {summary}")
-        return answers
+        return answers, summary
 
     def bulk_predict_multi_fields(
         self,
@@ -526,51 +507,118 @@ class SquadQA(object):
         method: Methods,
         retry: bool,
         group_size: int,
-    ) -> dict[str, str]:
+    ):
         """Predict the answers for a list of questions and contexts."""
 
         logger.info(
             "Bulk predicting answers for SQuAD dataset use method: {}".format(method)
         )
 
-        grouped_qs = defaultdict(list)
         # group questions by context
+        grouped_qs = defaultdict(list)
         for data in parsed_data:
-            if data.context in grouped_qs:
-                grouped_qs[data.context].append(data)
-            else:
-                grouped_qs[data.context] = [data]
+            grouped_qs[data.context].append(data)
 
         # init trackers for answers, summary, and retry distribution
-        answers, summary, retry_distribution = {}, defaultdict(int), defaultdict(int)
+        answers, summary = {}, defaultdict(int)
 
         # loop through d and group questions by group_size. if the questions are from different context then split them into different groups
         grouped_qs = tqdm(grouped_qs.items(), desc="Bulk predicting answers")
         for context, group in grouped_qs:
             num_questions = len(group)
             num_groups = num_questions // group_size
+            summary[f"number_of_groups_{group_size}"] += num_groups
             if num_questions % group_size != 0:
                 num_groups += 1
+                summary[f"number_of_incomplete_groups"] += 1
 
             for i in range(num_groups):
+                answers_group = []
                 start = i * group_size
-                end = start + group_size
+                end = (i + 1) * group_size
 
-                # if end is greater than the number of questions, set end to the number of questions
+                # if end is greater than the number of questions, set end to the tail of the list
                 if end > num_questions:
                     end = num_questions
 
                 questions = [data.question for data in group[start:end]]
                 question_ids = [data.question_id for data in group[start:end]]
 
-                answers_group = self.predict_multi_fields(questions, context, method)
+                answer = self.predict_multi_fields(questions, context, method)
 
-                for id, ans in zip(question_ids, answers_group):
-                    answers[id] = "" if "N/A" in ans else ans
+                # @ parse and append to answers list
+                if method == Methods.MULTI_FIELD_QA:
+                    for i in range(len(questions)):
+                        match = re.search(f"Answer{i+1}: (.*)", answer)
+                        answers_group.append(
+                            match.group(1).replace(f"Answer{i+1}: ", "")
+                            if match
+                            else ""
+                        )
+                elif method == Methods.MULTI_FIELD_STRUCTURED:
+                    try:
+                        answer = answer.replace("\n", "")
+                        # match = re.match(r"\{.*\}", answer)
+                        # answer = match.group(0) if match else answer
+                        curly_start = answer.find("{")
+                        curly_end = answer.rfind("}") + 1
+                        answer = answer[curly_start:curly_end]
+                        answer = json.loads(answer)
+                        for i in range(len(questions)):
+                            answers_group.append(answer[f"answer{i+1}"])
+                    except json.JSONDecodeError:
+                        logger.error(f"JSON decode error. {answer=}")
+                    except KeyError:
+                        logger.error(f"Key error. {answer=}")
+
+                # retry the prediction if the answer group is empty
+                if not answers_group:
+                    retry_count = 0
+                    MAX_RETRY = 10
+                    while retry_count < MAX_RETRY:
+                        logger.warning(
+                            "Retrying prediction for question_ids: {}".format(
+                                question_ids
+                            )
+                        )
+                        answer = self.predict_multi_fields(questions, context, method)
+                        summary["retry"] += 1
+                        try:
+                            # note: replace newline characters to avoid JSONDecodeError
+                            answer = answer.replace("\n", "")
+                            curly_start = answer.find("{")
+                            curly_end = answer.rfind("}") + 1
+                            answer = answer[curly_start:curly_end]
+                            # match = re.match(r"\{.*\}", answer)
+                            # answer = match.group(0) if match else answer
+                            answer = json.loads(answer)
+                            for i in range(len(questions)):
+                                answers_group.append(answer[f"answer{i+1}"])
+                            logger.info(
+                                "Prediction successful after retry for question_ids: {}".format(
+                                    question_ids
+                                )
+                            )
+                            summary["retry_success"] += 1
+                            break
+                        except json.JSONDecodeError as e:
+                            logger.error(f"{e}\n{answer=}")
+                            retry_count += 1
+
+                logger.info(f"{answers_group=}")
+                if answers_group:
+                    for id, ans in zip(question_ids, answers_group):
+                        answers[id] = "" if "N/A" in ans else ans
+                    summary["success"] += 1
+                else:
+                    # still not answers after retry, default to None
+                    summary["failed"] += 1
+                    for id in question_ids:
+                        answers[id] = None
 
         # bulk prediction summary and relative percentage
         logger.info(f"Summary: {summary}")
-        return answers
+        return answers, summary
 
 
 if __name__ == "__main__":
@@ -599,10 +647,14 @@ if __name__ == "__main__":
     SQUAD_DEV_TRAIN_PATH = "data/asset/eval/squad_v2/dev-v2.0_train.json"
     OUTPUT_PRED_PATH = "data/asset/eval/squad_v2"
 
-    OUTPUT_JSON_NAME = "{}_pred_llama3_8b_{}_gs{}.json".format(
-        datetime.datetime.now().strftime("%Y%m%d%H%M"),
-        SELECTED_METHOD.value,
-        GROUP_SIZE,
+    OUTPUT_JSON_NAME = (
+        "{date}_pred_{model}_{method}_gs{gs}_fixed{fixed_samples}.json".format(
+            date=datetime.datetime.now().strftime("%Y%m%d%H%M"),
+            model=MODEL,
+            method=SELECTED_METHOD.value,
+            gs=GROUP_SIZE,
+            fixed_samples=args.fixed_samples,
+        )
     )
     RETRY = True if SELECTED_METHOD == Methods.SINGLE_STRUCTURED_W_RETRY else False
 
@@ -615,17 +667,23 @@ if __name__ == "__main__":
         Methods.SINGLE_STRUCTURED,
         Methods.SINGLE_STRUCTURED_W_RETRY,
     ]:
-        answers = squad_qa.bulk_predict(
+        answers, summary = squad_qa.bulk_predict(
             parsed_data, method=SELECTED_METHOD, retry=RETRY
         )
     elif SELECTED_METHOD in [
         Methods.MULTI_FIELD_QA,
         Methods.MULTI_FIELD_STRUCTURED,
     ]:
-        answers = squad_qa.bulk_predict_multi_fields(
+        answers, summary = squad_qa.bulk_predict_multi_fields(
             parsed_data, method=SELECTED_METHOD, retry=RETRY, group_size=GROUP_SIZE
         )
 
     logger.info("Writing predictions to JSON file at {}".format(OUTPUT_PRED_PATH))
     with open(os.path.join(OUTPUT_PRED_PATH, OUTPUT_JSON_NAME), "w") as f:
         json.dump(answers, f)
+
+    logger.info("Writing summary to a text file at {}".format(OUTPUT_PRED_PATH))
+    with open(
+        os.path.join(OUTPUT_PRED_PATH, OUTPUT_JSON_NAME.replace(".json", ".txt")), "w"
+    ) as f:
+        f.write(json.dumps(summary, indent=4))
