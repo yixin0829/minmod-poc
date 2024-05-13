@@ -129,34 +129,34 @@ MULTI_FIELD_STRUCTURED_USER_PROMPT = (
 )
 
 
-# Enrich prompt
-FEW_SHOT_ENRICH_SYS_PROMPT = """You are given a question as input. You task is to rewrite the given question into a description as output. The description should be concise and capture the semantic meaning of the question. Here are some examples:
+# Enrich prompt (8-shot)
+FEW_SHOT_ENRICH_SYS_PROMPT = """You are given a question as input. You task is to rewrite the given question into a description as output. The output description should be concise and capture the semantic meaning of the input question. Here are some examples:
 ```
-Input: How long is the Rhine?
-Output: The length of the Rhine
+Question: How long is the Rhine?
+Description: The length of the Rhine
 
-Input: Where is the Rhine?
-Output: The location of the Rhine
+Question: Where is the Rhine?
+Description: The location of the Rhine
 
-Input: What is the smallest nation that the Rhine runs through?
-Output: The smallest nation that the Rhine runs through
+Question: What is the smallest nation that the Rhine runs through?
+Description: The smallest nation that the Rhine runs through
 
-Input: When was the current parliament of Scotland convened?
-Output: The date when the current parliament of Scotland was convened
+Question: When was the current parliament of Scotland convened?
+Description: The date when the current parliament of Scotland was convened
 
-Input: How many hundred of years was Scotland directly governed by the parliament of Great Britain?
-Output: The number of hundred of years Scotland was directly governed by the parliament of Great Britain
+Question: How many hundred of years was Scotland directly governed by the parliament of Great Britain?
+Description: The number of hundred of years Scotland was directly governed by the parliament of Great Britain
 
-Input: Which sea was oil discovered in?
-Output: The sea in which oil was discovered
+Question: Which sea was oil discovered in?
+Description: The sea in which oil was discovered
 
-Input: The word imperialism has it's origins in which ancient language?
-Output: The ancient language in which the word imperialism has it's origins
+Question: The word imperialism has it's origins in which ancient language?
+Description: The ancient language in which the word imperialism has it's origins
 
-Input: Who refused to act until Loudoun approved plans?
-Output: The person who refused to act until Loudoun approved plans
+Question: Who refused to act until Loudoun approved plans?
+Description: The person who refused to act until Loudoun approved plans
 ```
 
-Note: ONLY output the description of the question. DO NOT include the question itself or ANY additional comments."""
+Note: ONLY output the description in your response. DO NOT include the input question itself or ANY additional comments."""
 
-FEW_SHOT_ENRICH_USER_PROMPT = """Input: {question}"""
+FEW_SHOT_ENRICH_USER_PROMPT = """Input: {question}\nOutput: """

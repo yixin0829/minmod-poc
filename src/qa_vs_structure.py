@@ -13,11 +13,11 @@ import pandas as pd
 from dotenv import load_dotenv
 from loguru import logger
 from openai import OpenAI
-from pydantic import BaseModel, Field, ValidationError, create_model
+from pydantic import BaseModel, Field, create_model
 from tqdm import tqdm
 
 import config.prompts as prompts
-from config.config import Config, EmbeddingFunction
+from config.config import EmbeddingFunction
 from utils.utils import cosine_similarity
 
 load_dotenv()
@@ -38,6 +38,12 @@ class Methods(str, Enum):
     SINGLE_STRUCTURED_W_RETRY = "2shot_structured_w_retry"
     MULTI_FIELD_QA = "1shot_multi_field_qa"
     MULTI_FIELD_STRUCTURED = "1shot_multi_field_structured"
+
+
+class Models(str, Enum):
+    # All model temperatures are set to 0.5
+    LLAMA3_CUSTOM = "llama3-custom"
+    GEMMA = "gemma"
 
 
 @dataclass
@@ -604,6 +610,9 @@ class SquadQA(object):
                         except json.JSONDecodeError as e:
                             logger.error(f"{e}\n{answer=}")
                             retry_count += 1
+                        except KeyError as e:
+                            logger.error(f"{e}\n{answer=}")
+                            retry_count += 1
 
                 logger.info(f"{answers_group=}")
                 if answers_group:
@@ -624,7 +633,6 @@ class SquadQA(object):
 if __name__ == "__main__":
     """Run the SquadQA class to predict answers for the SQuAD dataset. Finally write predictions to a JSON file."""
 
-    # add argument parser
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, help="Model to use for prediction")
     parser.add_argument("--method", type=Methods, help="Method to use for prediction")
