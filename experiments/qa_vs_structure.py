@@ -16,25 +16,27 @@ from openai import OpenAI
 from pydantic import BaseModel, Field, create_model
 from tqdm import tqdm
 
-import config.prompts as prompts
-from config.config import EmbeddingFunction
-from utils.utils import cosine_similarity
+import src.config.prompts as prompts
+from src.config.config import EmbeddingFunction
+from src.utils.utils import cosine_similarity
 
 load_dotenv()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+LOG_LEVEL = "INFO"
 
 # remove the old handler. Else, the old one will work along with the new one you've added below'
 logger.remove()
 # Note: Config loguru logger to log to console and file
-LOG_LEVEL = "INFO"
 timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M")
 logger.add(sys.stdout, level=LOG_LEVEL)
 
 
 class Methods(str, Enum):
-    SINGLE_QA = "1shot_qa"
-    SINGLE_STRUCTURED = "2shot_structured"
+    SINGLE_QA = "1shot_qa"  # only one answerable question and answer example
+    SINGLE_STRUCTURED = (
+        "2shot_structured"  # one answerable and one unanswerable example
+    )
     SINGLE_STRUCTURED_W_RETRY = "2shot_structured_w_retry"
     MULTI_FIELD_QA = "1shot_multi_field_qa"
     MULTI_FIELD_STRUCTURED = "1shot_multi_field_structured"
