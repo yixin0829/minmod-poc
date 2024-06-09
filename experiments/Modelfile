@@ -2,5 +2,7 @@ FROM llama3
 
 PARAMETER temperature 0.5
 
+PARAMETER num_predict 1024
+
 # Then run `ollama create <custom_model_name> -f ./Modelfile`
 # `ollama run <custom_model_name>`

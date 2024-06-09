@@ -84,7 +84,14 @@ def normalize_answer(s):
     def lower(text):
         return text.lower()
 
-    return white_space_fix(remove_articles(remove_punc(lower(s))))
+    # Note: adapted by Yix
+    try:
+        s = white_space_fix(remove_articles(remove_punc(lower(s))))
+    except Exception as e:
+        # treat as wrong answer
+        s = str(e)
+
+    return s
 
 
 def get_tokens(s):

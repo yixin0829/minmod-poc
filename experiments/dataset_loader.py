@@ -1,8 +1,8 @@
 import dataclasses
 import json
 
-import loguru
 import tqdm
+from loguru import logger
 
 
 @dataclasses.dataclass
@@ -17,21 +17,20 @@ class SquadDatasetLoader:
     def __init__(self) -> None:
         super().__init__()
 
-    def load(self, path):
-        pass
+    def load(self, path: str) -> list[SquadQuestion]:
+        logger.info(f"Loading SQuAD dataset from {path}")
+        with open(path, "r") as f:
+            data = json.load(f)
+
+        data_processed = self._process(data)
+        return data_processed
 
     @staticmethod
-    def process(file_path: str) -> list[SquadQuestion]:
-        """
-        Parse the SQuAD dataset into a list of tuples
-        """
-        loguru.logger.info("Parsing SQuAD dataset")
-
-        with open(file_path, "r") as f:
-            squad_data = json.load(f)
-
+    def _process(data: dict) -> list[SquadQuestion]:
+        logger.info("Parsing SQuAD dataset into a list of tuples")
         parsed_data = []
-        squad_data_tqdm = tqdm.tqdm(squad_data["data"], desc="Parsing SQuAD data")
+        squad_data_tqdm = tqdm.tqdm(data["data"], desc="Parsing SQuAD data")
+
         for data in squad_data_tqdm:
             title = data["title"]
             for paragraph in data["paragraphs"]:
