@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
 import ollama
+from loguru import logger
 
 
 class BaseLLM(ABC):
@@ -29,7 +30,20 @@ class OllamaLLM(BaseLLM):
                 model=self.model_name, prompt=prompt, format="json" if json_mode else ""
             )
         except ollama.ResponseError as e:
-            raise e
+            # retry N times before raising the exception
+            for _ in range(3):
+                logger.warning("Ollama API failed. Retrying...")
+                try:
+                    response = ollama.generate(
+                        model=self.model_name,
+                        prompt=prompt,
+                        format="json" if json_mode else "",
+                    )
+                    break
+                except ollama.ResponseError as e:
+                    continue
+            else:
+                raise e
 
         return response["response"]
 
@@ -41,7 +55,20 @@ class OllamaLLM(BaseLLM):
                 format="json" if json_mode else "",
             )
         except ollama.ResponseError as e:
-            raise e
+            # retry N times before raising the exception
+            for _ in range(3):
+                logger.warning("Ollama API failed. Retrying...")
+                try:
+                    response = ollama.chat(
+                        model=self.model_name,
+                        messages=messages,
+                        format="json" if json_mode else "",
+                    )
+                    break
+                except ollama.ResponseError as e:
+                    continue
+            else:
+                raise e
 
         # parse the answer string to get the answers
         response_content = response["message"]["content"]
