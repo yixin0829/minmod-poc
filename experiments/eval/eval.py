@@ -48,6 +48,9 @@ def plot_bar_chart(experiment_results: dict[str, dict[str, float]]):
             if metric in metrics_to_plot
         ]
     )
+    df.to_csv(
+        "data/asset/eval/squad_v2/results/202406111755_pred_llama3-custom_batch-structured_bs8.csv"
+    )
 
     # Creating a bar plot using Seaborn with figure size 12x6
     plt.figure(figsize=(12, 6))
@@ -80,12 +83,27 @@ def main():
         (
             "JSON BS=4",
             "data/asset/eval/squad_v2/dev-v2.0.json",
-            "data/asset/eval/squad_v2/results/202406082311_pred_llama3-custom_batch-structured_bs4.json",
+            "data/asset/eval/squad_v2/results/202406111210_pred_llama3-custom_batch-structured_bs4.json",
         ),
         (
             "JSON BS=8",
             "data/asset/eval/squad_v2/dev-v2.0.json",
-            "data/asset/eval/squad_v2/results/202406082325_pred_llama3-custom_batch-structured_bs8.json",
+            "data/asset/eval/squad_v2/results/202406111755_pred_llama3-custom_batch-structured_bs8.json",
+        ),
+        (
+            "QA-JSON BS=2",
+            "data/asset/eval/squad_v2/dev-v2.0_tiny.json",
+            "data/asset/eval/squad_v2/results/202406102132_pred_llama3-custom_batch-qa-structured_bs2.json",
+        ),
+        (
+            "QA-JSON BS=4",
+            "data/asset/eval/squad_v2/dev-v2.0_tiny.json",
+            "data/asset/eval/squad_v2/results/202406102203_pred_llama3-custom_batch-qa-structured_bs4.json",
+        ),
+        (
+            "QA-JSON BS=8",
+            "data/asset/eval/squad_v2/dev-v2.0_tiny.json",
+            "data/asset/eval/squad_v2/results/202406102228_pred_llama3-custom_batch-qa-structured_bs8.json",
         ),
     ]
 

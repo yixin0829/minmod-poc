@@ -147,18 +147,26 @@ class Extractor:
             try:
                 ans = response_dict[f"A[{i+1}]"]
             except KeyError as e:
-                logger.error(f"Key error. {response=}")
-                summary["key_error"] += 1
-                ans = "Key Error"
-                failure_log.append(
-                    {
-                        "context": context,
-                        "questions": questions,
-                        "response": response,
-                        "group_answers": group_answers,
-                        "reason": f"Error in accessing parsed JSON object. {e=}",
-                    }
+                logger.error(
+                    f'Key error accessing "A[{i+1}]" in {response=}. Fall back accessing "properties" first'
                 )
+                try:
+                    ans = response_dict["properties"][f"A[{i+1}]"]
+                except KeyError as e:
+                    logger.error(
+                        f"Fallback fails. Log error and append to group_answers. {e=}"
+                    )
+                    summary["key_error"] += 1
+                    ans = "Key Error"
+                    failure_log.append(
+                        {
+                            "context": context,
+                            "questions": questions,
+                            "response": response,
+                            "group_answers": group_answers,
+                            "reason": f"Error in accessing parsed JSON object. {e=}",
+                        }
+                    )
 
             group_answers.append(ans)
 
@@ -176,6 +184,9 @@ class Extractor:
         # shuffle the questions to avoid any bias with the same seed
         for context, qs_group in context_qs_map.items():
             random.Random(1).shuffle(qs_group)
+
+        # free up memory by deleting the dataset
+        del dataset
 
         # init trackers for experiment report
         answers = {}
@@ -247,6 +258,9 @@ class Extractor:
         context_qs_map = collections.defaultdict(list)
         for data in dataset:
             context_qs_map[data.context].append(data)
+
+        # free up memory by deleting the dataset
+        del dataset
 
         # shuffle the questions to avoid any bias with the same seed
         for context, qs_group in context_qs_map.items():
@@ -323,6 +337,9 @@ class Extractor:
         context_qs_map = collections.defaultdict(list)
         for data in dataset:
             context_qs_map[data.context].append(data)
+
+        # free up memory by deleting the dataset
+        del dataset
 
         # shuffle the questions to avoid any bias with the same seed
         for context, qs_group in context_qs_map.items():

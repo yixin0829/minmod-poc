@@ -111,6 +111,9 @@ def compute_f1(a_gold, a_pred):
     num_same = sum(common.values())
     if len(gold_toks) == 0 or len(pred_toks) == 0:
         # If either is no-answer, then F1 is 1 if they agree, 0 otherwise
+        # if int(gold_toks == pred_toks) == 0:
+        #     # print out for error analysis
+        #     print(f"gold: {gold_toks}, pred: {pred_toks}")
         return int(gold_toks == pred_toks)
     if num_same == 0:
         return 0
